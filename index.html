@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>좀비킬 — 리볼버 손맛 프로토타입</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #050608; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); cursor: none; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+// 공용 상수·헬퍼 (모든 스크립트가 공유)
+window.ZK = {
+  W: 720, H: 1280,
+  HORIZON: 330,   // 좀비가 나타나는 먼 쪽 화면 y
+  LINE: 1045,     // 바리케이드 라인 (좀비 발이 멈추는 y)
+  rand: (a, b) => a + Math.random() * (b - a),
+  clamp: (v, a, b) => (v < a ? a : v > b ? b : v),
+  lerp: (a, b, t) => a + (b - a) * t,
+  // 화면 y(깊이) → 원근 스케일
+  scaleAt(y) { const t = ZK.clamp((y - ZK.HORIZON) / (ZK.LINE - ZK.HORIZON), 0, 1.2); return 0.30 + t * 0.85; },
+  // 화면 y(깊이) → 도로 반폭
+  roadHalfAt(y) { const t = ZK.clamp((y - ZK.HORIZON) / (ZK.LINE - ZK.HORIZON), 0, 1.3); return 60 + t * 290; },
+};
+</script>
+<script src="js/audio.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/zombie.js"></script>
+<script src="js/gun.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>좀비킬 FPS — 리볼버 프로토타입</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  #gl, #hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="hud"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+// 공용 헬퍼 (audio.js 와 3D 스크립트가 함께 사용)
+window.ZK = {
+  rand: (a, b) => a + Math.random() * (b - a),
+  clamp: (v, a, b) => (v < a ? a : v > b ? b : v),
+  lerp: (a, b, t) => a + (b - a) * t,
+  damp: (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt)),
+};
+</script>
+<script src="js/audio.js"></script>
+<script src="js3d/fx3d.js"></script>
+<script src="js3d/world3d.js"></script>
+<script src="js3d/zombie3d.js"></script>
+<script src="js3d/gun3d.js"></script>
+<script src="js3d/character3d.js"></script>
+<script src="js3d/fortress3d.js"></script>
+<script src="js3d/absorb3d.js"></script>
+<script src="js3d/survivor3d.js"></script>
+<script src="js3d/player3d.js"></script>
+<script src="js3d/survival3d.js"></script>
+<script src="js3d/missions3d.js"></script>
+<script src="js3d/meta3d.js"></script>
+<script src="js3d/dread3d.js"></script>
+<script src="js3d/game3d.js"></script>
+</body>
+</html>
