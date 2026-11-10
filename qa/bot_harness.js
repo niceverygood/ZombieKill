@@ -13,11 +13,11 @@
   const PROFILES = {
     // 초보도 앞 장애물은 보고 피한다(2026-11-09 임무 추가 뒤): 임무로 멀리 다니면서 같은 벽에 1분에 15번씩 박아 죽는 건 사람 초보가 아니라 봇의 한계였다
     // risky: 무전에서 위험(B)을 고를 확률 (초보는 고르지 않고 20초를 흘려보내 A) · arm: 매달린 놈 팔을 노릴 확률 · sac: 숙주 고름주머니를 노릴 확률
-    '초보': { aim: 2.5 * Math.PI / 180, react: 0.6, head: 0.10, seek: 0.4, smartCards: false, lookahead: true, skeet: 0.3, slam: 0.3, jam: 0.15, boltR: 12, risky: 0, arm: 0, sac: 0.3 },
-    '보통': { aim: 1.2 * Math.PI / 180, react: 0.35, head: 0.30, seek: 1.0, smartCards: false, lookahead: true, skeet: 0.6, slam: 0.6, jam: 0.08, boltR: 20, trapWatch: true, risky: 0.4, arm: 0.3, sac: 0.7 },
-    '숙련': { aim: 0.5 * Math.PI / 180, react: 0.2, head: 0.45, seek: 1.0, smartCards: true, lookahead: true, skeet: 0.9, slam: 0.85, jam: 0.03, boltR: 28, trapWatch: true, risky: 0.65, arm: 0.6, sac: 0.95 },
+    '초보': { aim: 2.5 * Math.PI / 180, react: 0.6, head: 0.10, seek: 0.4, smartCards: false, lookahead: true, skeet: 0.3, slam: 0.3, jam: 0.15, boltR: 12, risky: 0, arm: 0, sac: 0.3, armsR: 30, armsBrave: 4 },
+    '보통': { aim: 1.2 * Math.PI / 180, react: 0.35, head: 0.30, seek: 1.0, smartCards: false, lookahead: true, skeet: 0.6, slam: 0.6, jam: 0.08, boltR: 20, trapWatch: true, risky: 0.4, arm: 0.3, sac: 0.7, armsR: 45, armsBrave: 5 },
+    '숙련': { aim: 0.5 * Math.PI / 180, react: 0.2, head: 0.45, seek: 1.0, smartCards: true, lookahead: true, skeet: 0.9, slam: 0.85, jam: 0.03, boltR: 28, trapWatch: true, risky: 0.65, arm: 0.6, sac: 0.95, armsR: 55, armsBrave: 7 },
     // 조용한 보통: 매달린 좀비나 12m 안의 좀비만 쏜다 (소음 관리가 실제로 포위를 줄이는지 확인용)
-    '보통조용': { aim: 1.2 * Math.PI / 180, react: 0.35, head: 0.30, seek: 1.0, smartCards: false, lookahead: true, quiet: 12, skeet: 0.6, slam: 0.6, jam: 0.08, risky: 0.4, arm: 0.3, sac: 0.7 },
+    '보통조용': { aim: 1.2 * Math.PI / 180, react: 0.35, head: 0.30, seek: 1.0, smartCards: false, lookahead: true, quiet: 12, skeet: 0.6, slam: 0.6, jam: 0.08, risky: 0.4, arm: 0.3, sac: 0.7, armsR: 45, armsBrave: 5 },
   };
   window.__runs = window.__runs || [];
   let R = null, dmgSrc = 'crash', killSrc = null, B = null;
@@ -43,7 +43,8 @@
   wrapG('auraHit', (o, a) => { const p = killSrc; killSrc = a[2] === 'fire' ? 'fire' : 'aura'; try { return o.apply(g, a); } finally { killSrc = p; } });
   wrapG('airHit', (o, a) => { const p = killSrc; killSrc = 'air'; try { return o.apply(g, a); } finally { killSrc = p; } });   // AIR 폭발과 그 처치
   wrapG('bowl', (o, a) => { const p = killSrc; killSrc = 'bowl'; try { return o.apply(g, a); } finally { killSrc = p; } });     // 볼링(들이받기 계열)
-  wrapG('blast', (o, a) => { const p = killSrc; killSrc = p === 'air' ? 'air' : (a[1] === 2.8 && a[2] === 320 ? 'sign' : 'blast'); try { return o.apply(g, a); } finally { killSrc = p; } });   // 드럼통·분쇄 범퍼 폭발
+  { const oa = ZK.arms.update; ZK.arms.update = function (...a) { const p1 = dmgSrc, p2 = killSrc; dmgSrc = 'nade'; killSrc = 'nade'; try { return oa.apply(ZK.arms, a); } finally { dmgSrc = p1; killSrc = p2; } }; }   // 수류탄 폭발 처치·버스 피해는 'nade'
+  wrapG('blast', (o, a) => { const p = killSrc; killSrc = p === 'air' ? 'air' : p === 'nade' ? 'nade' : (a[1] === 2.8 && a[2] === 320 ? 'sign' : 'blast'); try { return o.apply(g, a); } finally { killSrc = p; } });   // 드럼통·분쇄 범퍼 폭발
   { const ou = ZK.mis.update, ob = ZK.mis.blowBarrel; ZK.mis.update = function (...a) { const p = dmgSrc; dmgSrc = 'blast'; try { return ou.apply(ZK.mis, a); } finally { dmgSrc = p; } }; ZK.mis.blowBarrel = function (...a) { const p = dmgSrc; dmgSrc = 'blast'; try { return ob.apply(ZK.mis, a); } finally { dmgSrc = p; } }; }   // 드럼통·간판이 버스에 준 피해
   wrapG('onCrash', (o, a) => { log('CRASH', +(a[1] ?? a[0]).toFixed(1)); if (R) { const h = (a[1] ?? a[0]) > 5; R[h ? 'crashHead' : 'crashScrape'] = (R[h ? 'crashHead' : 'crashScrape'] || 0) + 1; } if (B) B.crashed = true; return o.apply(g, a); });
   const zh = ZK.Zombie3.prototype.hit; ZK.Zombie3.prototype.hit = function (part, point, dir, dmg, opts = {}) {
@@ -75,12 +76,22 @@
     const want = (s.thirst < 50 && !inv.water) || (s.hunger < 50 && !inv.can) || (s.fuel < 35 && !inv.fuelcan) || (s.bleeding && !inv.bandage) || (s.infected && s.infection > 40 && !inv.anti);
     const urgent = s.thirst <= 0 || s.hunger <= 0 || s.fuel <= 0;
     if (!B.trip && want && g.mode === 'drive' && g.t < 500 && !B.hold && !(ZK.mis.offer && B.offerPick && !urgent) && (B.tripCd -= dt) <= 0) {   // 8:20 이후엔 탈출이 먼저 · 무전에서 고른 쪽으로 가는 중엔 미룸
-      const pts = N.points.filter(q => !q.done && q.pos.distanceTo(F.pos) < 70 && !(B.skip.get(q) > g.t))
+      const pts = N.points.filter(q => !q.done && !q.cache && q.pos.distanceTo(F.pos) < 70 && !(B.skip.get(q) > g.t))
         .map(q => ({ q, d: q.pos.distanceTo(F.pos) + (q.name === '상점 셔터' ? 10 : 0) + 6 * g.zombies.filter(z => z.alive && z.aware === 'chase' && z.pos.distanceTo(q.pos) < 12).length }))   // 벽 앞 셔터는 박기 쉬워 조금 덜 선호
         .sort((a, b) => a.d - b.d);
       if (pts[0]) { B.trip = { p: pts[0].q, phase: 'drive', t: 0 }; R.trips = (R.trips || 0) + 1; log('TRIP'); } else B.tripCd = 5;
     }
+    // ── 무기 보급함 원정: 필요한 것(조준경·소총이 없거나, 소총탄 < 30, 수류탄 < 2)이 든 상자가 가깝고 근처에 깬 좀비가 적으면 내려서 가져온다 ──
+    if (!B.trip && g.mode === 'drive' && g.t > 25 && g.t < 470 && !B.hold && !(ZK.mis.offer && (B.offerPick || prof.risky > 0)) && !B.trapWatch && (B.armsCd = (B.armsCd || 0) - dt) <= 0 && ZK.arms) {   // 무전·덫 지켜보기 중엔 원정을 시작하지 않는다
+      B.armsCd = 3; const G3 = ZK.gun3;
+      const want = c => c.kind === 'scope' ? !G3.hasScope : c.kind === 'rifle' ? !G3.hasRifle : c.kind === 'ammo' ? G3.hasRifle && (inv.rifleAmmo || 0) < 30 : (inv.grenade || 0) < 2;
+      const pick = ZK.arms.caches.filter(q => !q.opened && want(q) && q.pos.distanceTo(F.pos) < prof.armsR && !(B.skip.get(q.pt) > g.t))
+        .map(q => ({ q, d: q.pos.distanceTo(F.pos), awake: ZK.arms.liveGuards(q).length + g.zombies.filter(z => z.alive && !z.cacheGuard && z.aware === 'chase' && z.pos.distanceTo(q.pos) < 12).length }))   // 상자 곁 경비(잠든 놈 포함) + 근처 추격자
+        .filter(o => o.awake < prof.armsBrave).sort((a, b) => a.d - b.d)[0];
+      if (pick) { B.trip = { p: pick.q.pt, phase: 'drive', t: 0, arms: pick.q.kind }; R.armsTrips = (R.armsTrips || 0) + 1; log('ARMS_TRIP', pick.q.kind); }
+    }
     const tr = B.trip; if (!tr) return false;
+    if (tr.arms && tr.phase === 'drive' && ZK.mis.offer && B.offerIdx !== ZK.mis.offer.idx && prof.risky > 0) { B.trip = null; return false; }   // 차로 가는 중에 무전이 오면 원정 취소
     tr.t += dt;
     if (tr.phase === 'drive') {
       if (g.mode !== 'drive') { tr.phase = 'walk'; return true; }
@@ -174,12 +185,25 @@
     const z = g.zombies.filter(z => z.alive && (z.state === 'cling' || z.pos.distanceTo(cam) < (prof.quiet || 30))).sort((a, c) => key(a) - key(c))[0];
     if (z !== B.tz) { B.tz = z; B.react = prof.react; }
     B.react -= dt;
+    // 자동소총: 15m 안에 5마리 이상이거나 매달린 놈이 2마리 이상이면 꺼내고, 3마리 밑이거나 탄이 없으면 리볼버로
+    const crowd = g.zombies.filter(q => q.alive && q.pos.distanceTo(cam) < 15).length, rifleOk = G3.hasRifle && G3.rf.loaded + G3.rifleAmmo() > 0;
+    if (rifleOk && (crowd >= 5 || F0().clingers >= 2)) { if (G3.weapon !== 'rifle') G3.switchTo('rifle'); }
+    else if (G3.weapon === 'rifle' && (!rifleOk || crowd < 3)) G3.switchTo('revolver');
+    if (G3.weapon === 'rifle' && G3.rf.loaded === 0 && !G3.rf.reloading && G3.rifleAmmo() > 0) G3.reload();
     // 산탄총: 8m 안이면 꺼내고 12m 밖이거나 탄이 없으면 리볼버로 (자꾸 바꾸지 않게 간격을 둠)
-    if (G3.hasShotgun && z) { const d = z.pos.distanceTo(cam), ammo = G3.sg.loaded + G3.shells();
+    if (G3.hasShotgun && z && G3.weapon !== 'rifle') { const d = z.pos.distanceTo(cam), ammo = G3.sg.loaded + G3.shells();
       if (G3.weapon === 'revolver' && d < 8 && ammo > 0) G3.switchTo('shotgun'); else if (G3.weapon === 'shotgun' && (d > 12 || ammo === 0)) G3.switchTo('revolver'); }
     if (G3.weapon === 'shotgun' && G3.sg.loaded === 0 && !G3.sg.reloading && G3.shells() > 0) G3.reload();
     if (G3.weapon === 'revolver' && gs.ammo === 0 && !gs.reloading && !(gs.auto > 0)) G3.reload();   // 탄 0인 채 멈춘 리볼버 장전
-    const ready = G3.weapon === 'shotgun' ? gs.cd <= 0 && !G3.sg.reloading && G3.sg.loaded > 0 : gs.cd <= 0 && !gs.reloading && gs.ammo > 0;
+    const ready = G3.weapon === 'shotgun' ? gs.cd <= 0 && !G3.sg.reloading && G3.sg.loaded > 0 : G3.weapon === 'rifle' ? gs.cd <= 0 && !G3.rf.reloading && G3.rf.loaded > 0 : gs.cd <= 0 && !gs.reloading && gs.ammo > 0;
+    // 수류탄: 9~24m에 좀비가 4m 안에 6마리 이상 뭉친 곳이 있으면 그 바닥으로 (6초에 한 번 · 나·버스에서 8m 넘게 떨어진 곳만)
+    if ((B.nadeT = (B.nadeT || 0) - dt) <= 0 && (ZK.needs.inv.grenade || 0) > 0 && ZK.arms) {
+      B.nadeT = 1.5;
+      const near = g.zombies.filter(q => q.alive && q.state !== 'cling' && q.pos.distanceTo(cam) > 9 && q.pos.distanceTo(cam) < 24 && q.pos.distanceTo(F0().pos) > F0().halfL + 8);
+      const c = near.find(q => near.filter(o => o.pos.distanceTo(q.pos) < 4).length >= 6);
+      if (c) { B.nadeT = 6; const d0 = c.pos.clone().sub(cam); ps.yaw = Math.atan2(-d0.x, -d0.z); ps.pitch = Math.atan2(-cam.y, Math.hypot(d0.x, d0.z)); ps.lookYaw = ps.lookPitch = 0; ps.recP = ps.recY = 0; P.update(0.0001, { ads: false });
+        if (ZK.arms.throwGrenade(g, D.camera)) R.nades = (R.nades || 0) + 1; }
+    }
     // 화염병: 12m 안에 쫓아오는 좀비가 6마리 이상이면 지금 겨눈 쪽으로 (6초에 한 번)
     if ((B.molT = (B.molT || 0) - dt) <= 0 && z && (ZK.needs.inv.molotov > 0) && g.zombies.filter(q => q.alive && q.state !== 'cling' && q.pos.distanceTo(cam) < 12).length >= 6) {
       B.molT = 6; const d0 = z.torso.getWorldPosition(new T.Vector3()).sub(cam); ps.yaw = Math.atan2(-d0.x, -d0.z); ps.pitch = 0.12; P.update(0.0001, { ads: false });
@@ -222,7 +246,8 @@
       if (z.state === 'cling' && Math.random() < prof.arm) { const a = z.arms.find(q => q.children.length && q.parent); if (a) part = a.children[0]; }
       if (z.T.host && z.sacs && Math.random() < prof.sac) { const sv = z.sacs.filter(q => q.visible).sort((a, c) => a.getWorldPosition(new T.Vector3()).distanceTo(cam) - c.getWorldPosition(new T.Vector3()).distanceTo(cam))[0]; if (sv) part = sv; }
       const head = part === z.head, d = part.getWorldPosition(new T.Vector3()).sub(cam);
-      ps.yaw = Math.atan2(-d.x, -d.z) + (Math.random() - 0.5) * 2 * prof.aim; ps.pitch = Math.atan2(d.y, Math.hypot(d.x, d.z)) + (Math.random() - 0.5) * 2 * prof.aim;
+      const aimE = prof.aim * (G3.hasScope && G3.weapon !== 'shotgun' && d.length() > 15 ? 0.5 : 1);   // 조준경: 먼 표적 조준 오차 절반 (봇은 정조준 확대를 쓰지 않으므로 이걸로 대신)
+      ps.yaw = Math.atan2(-d.x, -d.z) + (Math.random() - 0.5) * 2 * aimE; ps.pitch = Math.atan2(d.y, Math.hypot(d.x, d.z)) + (Math.random() - 0.5) * 2 * aimE;
       ps.recP = ps.recY = 0; P.update(0.0001, { ads: false });
       dispatchEvent(new MouseEvent('mousedown', { button: 0 })); dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
     }
@@ -258,7 +283,8 @@
     }
     R.duration = +g.t.toFixed(1);
     R.rhythm = Object.assign({}, ZK.gun3.state.stat); R.skeet = { air: g.airN || 0, strike: g.strikeN || 0, tiers: Object.assign({}, g.tierN || {}) }; R.traps = { trucks: ZK.mis.truckOn || 0, traps: ZK.mis.trapN || 0, signs: ZK.mis.signDrops || 0 }; R.perfectN = g.perfectN || 0;
-    R.parts = { helmet: g.helmetN || 0, sac: g.sacN || 0, drop: g.dropN || 0 }; R.radio = { picked: ZK.mis.list.map(m => (m.risky ? 'B' : 'A') + ':' + m.how), intent: R.radioIntent || [], risky: ZK.mis.riskyDone || 0 }; R.contracts = [...ZK.surv.contract];
+    R.parts = { helmet: g.helmetN || 0, sac: g.sacN || 0, drop: g.dropN || 0 };
+    if (ZK.arms) { const a = ZK.arms.stats; R.arms = { trips: R.armsTrips || 0, opened: a.opened.slice(), openT: a.openT.slice(), scopeT: a.scopeT, rifleT: a.rifleT, nades: a.nades, nadeKills: a.nadeKills, rifleShots: a.rifleShots, rifleKills: a.rifleKills, selfNade: Math.round(a.hpLostFoot) }; } R.radio = { picked: ZK.mis.list.map(m => (m.risky ? 'B' : 'A') + ':' + m.how), intent: R.radioIntent || [], risky: ZK.mis.riskyDone || 0 }; R.contracts = [...ZK.surv.contract];
     R.dread = ZK.dread && ZK.dread.stats ? Object.assign({}, ZK.dread.stats, { mech: ZK.dread.mech }) : null;   // 공포 디렉터: 발견·덮치기·아슬아슬·지침·고위협 시간
     R.chasers = g.chasers || 0; R.searched = ZK.needs.searched; R.mis = ZK.mis.list.map(m => m.kind + (m.risky ? '!' : '') + ':' + m.state); R.misDone = ZK.mis.done; R.shotgun = ZK.gun3.hasShotgun; { const s2 = ZK.needs.s; R.endNeeds = [Math.round(s2.fuel), Math.round(s2.hunger), Math.round(s2.thirst), Math.round(s2.fatigue), Math.round(s2.infection)]; } R.meleeCut = Math.round(g.meleeCut || 0);   // 근접 피해 상한이 막아 준 피해
     if (g.state !== 'play' && !R.saved) { R.saved = true; R.result = g.state === 'win' ? 'win' : 'lose'; R.cause = g.overWhy || ''; window.__runs.push(R); }
@@ -273,7 +299,7 @@
       return { profile: r.profile, seed: r.seed, duration: r.duration, goal: 600, result: r.result, cause: r.result === 'lose' ? (r.cause || '?') : '', events: ev,
         min_hp: +r.minHp.toFixed(3), min_hp_t: r.minHpT, chasers: r.chasers || 0, chaser_kills: r.chaserKills || {},
         rhythm: r.rhythm, skeet: r.skeet, traps: r.traps, truck_shots: r.truckShots || 0,
-        missions: r.mis || [], missions_done: r.misDone || 0, stars: (r.result === 'win' ? 2 : 0) + Math.min(3, r.misDone || 0) + Math.min(3, (r.radio && r.radio.risky) || 0), parts: r.parts, radio: r.radio, contracts: r.contracts || [], molotovs: r.molotovs || 0, shotgun: !!r.shotgun,
+        missions: r.mis || [], missions_done: r.misDone || 0, stars: (r.result === 'win' ? 2 : 0) + Math.min(3, r.misDone || 0) + Math.min(3, (r.radio && r.radio.risky) || 0), parts: r.parts, arms: r.arms, radio: r.radio, contracts: r.contracts || [], molotovs: r.molotovs || 0, shotgun: !!r.shotgun,
         trips: r.trips || 0, searched: r.searched || 0, uses: r.uses || 0, foot_sec: Math.round(r.footT || 0), zero_need_sec: Math.round(r.zeroNeed || 0), fuel_zero_sec: Math.round(r.fuelZero || 0), infected_at: r.infectedAt || null, unstuck: r.unstuck || 0, end_needs: r.endNeeds,
         death_trace: r.result === 'lose' ? r.trace : undefined, hordes: r.hordeLog || [], noise_avg: r.duration ? +((r.noiseSum || 0) / r.duration).toFixed(1) : 0, crash_head: r.crashHead || 0, crash_scrape: r.crashScrape || 0, capped_hits: r.capped || 0, swarm_warnings: r.swarms || 0, pinned_sec: r.pinned || 0, melee_cut: r.meleeCut || 0, warn_to_death: r.result === 'lose' && r.lastSwarm ? +(r.duration - (r.lastSwarm - 30)).toFixed(1) : undefined, attack_peak: r.atkPeak || 0,
         raw_counts: r.events.reduce((m, e) => (m[e[1]] = (m[e[1]] || 0) + 1, m), {}),
@@ -285,7 +311,7 @@
   // 한 판을 끝까지: 도구 호출 한 번이 20초를 넘지 않게 60초씩 진행하고, 못 끝내면 'PARTIAL' → 같은 인자로 다시 부르면 이어서
   window.__go = (p, sd) => { if (!R || R.saved || R.profile !== p || R.seed !== sd) __startRun(p, sd); return __continue(60); };
   window.__sum = () => [R.profile + R.seed + ' ' + R.result + '@' + R.duration, 'minHp ' + R.minHp.toFixed(2) + '@' + R.minHpT, 'capped ' + (R.capped || 0), 'cut ' + (R.meleeCut || 0),
-    'atkPeak ' + R.atkPeak, 'swarm ' + (R.swarms || 0), 'hordes ' + (R.hordeLog || []).map(h => h[0] + (h[1] === 'noise' ? 'n' : 't')).join(','), 'pinned ' + (R.pinned || 0) + 's', 'trips ' + (R.trips || 0) + '/found ' + ZK.needs.searched, 'zero ' + Math.round(R.zeroNeed || 0) + 's', 'fuel0 ' + Math.round(R.fuelZero || 0) + 's', 'foot ' + Math.round(R.footT || 0) + 's', 'end ' + JSON.stringify(R.endNeeds), 'why ' + (g.overWhy || ''), 'mis ' + (R.mis || []).join(','), 'rhythm ' + JSON.stringify(ZK.gun3.state.stat), 'air ' + (g.airN || 0) + ' strike ' + (g.strikeN || 0) + ' tiers ' + JSON.stringify(g.tierN || {}), 'traps ' + JSON.stringify({ t: ZK.mis.truckOn, trap: ZK.mis.trapN, sign: ZK.mis.signDrops }), 'stars ' + ((g.state === 'win' ? 2 : 0) + Math.min(3, ZK.mis.done) + Math.min(3, ZK.mis.riskyDone || 0)), 'parts ' + JSON.stringify({ h: g.helmetN, s: g.sacN, d: g.dropN }), 'radio ' + ZK.mis.list.map(m => (m.risky ? 'B' : 'A') + m.how[0]).join(','), 'contract ' + [...ZK.surv.contract].join('+'), 'crash ' + (R.crashHead || 0) + '/' + (R.crashScrape || 0),
+    'atkPeak ' + R.atkPeak, 'swarm ' + (R.swarms || 0), 'hordes ' + (R.hordeLog || []).map(h => h[0] + (h[1] === 'noise' ? 'n' : 't')).join(','), 'pinned ' + (R.pinned || 0) + 's', 'trips ' + (R.trips || 0) + '/found ' + ZK.needs.searched, 'zero ' + Math.round(R.zeroNeed || 0) + 's', 'fuel0 ' + Math.round(R.fuelZero || 0) + 's', 'foot ' + Math.round(R.footT || 0) + 's', 'end ' + JSON.stringify(R.endNeeds), 'why ' + (g.overWhy || ''), 'mis ' + (R.mis || []).join(','), 'rhythm ' + JSON.stringify(ZK.gun3.state.stat), 'air ' + (g.airN || 0) + ' strike ' + (g.strikeN || 0) + ' tiers ' + JSON.stringify(g.tierN || {}), 'traps ' + JSON.stringify({ t: ZK.mis.truckOn, trap: ZK.mis.trapN, sign: ZK.mis.signDrops }), 'stars ' + ((g.state === 'win' ? 2 : 0) + Math.min(3, ZK.mis.done) + Math.min(3, ZK.mis.riskyDone || 0)), 'arms ' + JSON.stringify(ZK.arms ? { o: ZK.arms.stats.opened.length, rk: ZK.arms.stats.rifleKills, nk: ZK.arms.stats.nadeKills, n: ZK.arms.stats.nades } : {}), 'parts ' + JSON.stringify({ h: g.helmetN, s: g.sacN, d: g.dropN }), 'radio ' + ZK.mis.list.map(m => (m.risky ? 'B' : 'A') + m.how[0]).join(','), 'contract ' + [...ZK.surv.contract].join('+'), 'crash ' + (R.crashHead || 0) + '/' + (R.crashScrape || 0),
     JSON.stringify(Object.fromEntries(Object.entries(R.dmg).map(([a, v]) => [a, v | 0])))].join(' | ');
   window.__fullS = (p, sd, key = '__runsB') => {
     const t0 = performance.now(); let s;

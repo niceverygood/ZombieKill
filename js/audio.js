@@ -163,6 +163,15 @@
     tone(t + 0.17, { type: 'triangle', freq: 2100, dur: 0.03, gain: 0.05 });
     A.duck(0.55, 0.3);
   };
+  // 자동소총(무기 보급함, 2026-11-10): 리볼버보다 가볍고 날카로운 '탕' — 초당 10발이라 저음 꼬리·덕킹을 짧게
+  A.rifleShot = function () {
+    if (!ok()) return; const t = now(), v = R(0.95, 1.06);
+    noise(t, 0.018, { type: 'highpass', freq: 3200 * v, gain: 1.0, send: 0.25 });
+    noise(t + 0.001, 0.05, { type: 'bandpass', freq: 1500 * v, q: 1.2, gain: 0.6, echo: 0.25 });
+    tone(t + 0.002, { freq: 120 * v, freqEnd: 45, dur: 0.11, gain: 0.7, dist: true });
+    A.duck(0.25, 0.12);
+  };
+  // 수류탄 핀·투척 소리는 cylOut/casing을 쓰고, 폭발은 g.boom(thud + gibBurst)
   // 산탄총 추가 저음: 리볼버보다 넓고 무거운 '콰앙'
   A.shotgunBoom = function () {
     if (!ok()) return; const t = now();

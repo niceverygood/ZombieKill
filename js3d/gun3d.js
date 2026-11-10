@@ -10,10 +10,13 @@
     flashT: 0, pose: 0, sprint: 0, ads: 0, bob: 0, swayX: 0, swayY: 0,
     // 6발 리듬: ch=이번 실린더 결과('head'|'body'|'miss') · hot=달군 탄 남은 발 · fastRel=클린 보상 빠른 장전 · steady=탁 닫기 보상(다음 첫 발 퍼짐 절반)
     ch: [], streak: 0, hot: 0, fastRel: false, steady: false, cleanT: 0, slamT: 0, slamTxt: '', stat: { cyl: 0, clean: 0, perfect: 0, slam: 0, jam: 0 } };
-  let scene, cam, mainCam, vm, cylG, cylPivot, hammer, flash, flashLight, sleeve, sg, brk, sgFlash;
+  let scene, cam, mainCam, vm, cylG, cylPivot, hammer, flash, flashLight, sleeve, sg, brk, sgFlash, rf, rfMag, rfFlash, scopeR, scopeF;
   // 두 번째 무기: 수평 쌍대 산탄총 (2발 · 8알 · 꺾어서 장전). 산탄은 ZK.needs.inv.shell에서 꺼내 쓴다
   const sgs = G.sg = { loaded: 0, reloading: false, rt: 0, ev: 0 };
   G.weapon = 'revolver'; G.hasShotgun = false;
+  // 세 번째 무기: 자동소총 (무기 보급함에서만 · 30발 탄창 · 초당 10발 · 소총탄은 ZK.needs.inv.rifleAmmo) / 조준경: 리볼버·소총 정조준 확대 (arms3d)
+  const rfs = G.rf = { loaded: 0, reloading: false, rt: 0, ev: 0 }, RF_MAG = 30, RF_INT = 0.1;
+  G.hasRifle = false; G.hasScope = false; G.RF_MAG = RF_MAG;
   const HIP = new T.Vector3(0.15, -0.15, -0.4), ADS = new T.Vector3(0, -0.047, -0.25);
   const SPR = new T.Vector3(0.12, -0.2, -0.3), REL = new T.Vector3(0.06, -0.12, -0.3);
 
@@ -78,13 +81,43 @@
     box(0.062, 0.085, 0.07, skin, 0.004, -0.07, 0.05, sg).rotation.x = 0.3;
     box(0.055, 0.03, 0.06, skin, 0, -0.03, -0.12, brk);   // 앞손
     sgFlash = new T.Sprite(flash.material.clone()); sgFlash.position.set(0, 0.014, -0.4); sgFlash.visible = false; sg.add(sgFlash);
+    // 조준경: 리볼버 위 짧은 망원경 (주우면 보임)
+    const scopeMat = new T.MeshPhongMaterial({ color: 0x15171a, specular: 0x666a70, shininess: 60 }), lensMat = new T.MeshBasicMaterial({ color: 0x2a6a9a });
+    const mkScope = (len, parent, y, z) => { const sgp = new T.Group(); sgp.position.set(0, y, z); parent.add(sgp);
+      const tube = new T.Mesh(new T.CylinderGeometry(0.014, 0.014, len, 12), scopeMat); tube.rotation.x = Math.PI / 2; sgp.add(tube);
+      for (const e of [-1, 1]) { const bell = new T.Mesh(new T.CylinderGeometry(0.019, 0.016, 0.03, 12), scopeMat); bell.rotation.x = Math.PI / 2; bell.position.z = e * len / 2; sgp.add(bell);
+        const lens = new T.Mesh(new T.CircleGeometry(0.016, 12), lensMat); lens.position.z = e * (len / 2 + 0.016); if (e > 0) lens.rotation.y = Math.PI; sgp.add(lens); }
+      const mnt = new T.Mesh(new T.BoxGeometry(0.012, 0.016, 0.03), dark); mnt.position.y = -0.016; sgp.add(mnt); sgp.visible = false; return sgp; };
+    scopeR = mkScope(0.13, vm, 0.058, -0.09);
+    // 자동소총 모델: 몸통 · 총열 · 덮개 · 탄창(장전 때 빠짐) · 개머리 · 손잡이 · 손
+    rf = new T.Group(); scene.add(rf); rf.visible = false;
+    const rfMetal = new T.MeshPhongMaterial({ color: 0x23262b, specular: 0x7a8290, shininess: 55 }), rfPoly = new T.MeshLambertMaterial({ color: 0x2e3328 });
+    box(0.05, 0.06, 0.24, rfMetal, 0, 0, -0.02, rf);                       // 몸통
+    box(0.016, 0.016, 0.26, rfMetal, 0, 0.012, -0.27, rf);                 // 총열
+    box(0.046, 0.046, 0.15, rfPoly, 0, 0.004, -0.2, rf);                   // 덮개
+    box(0.012, 0.03, 0.012, dark, 0, 0.04, -0.33, rf);                     // 가늠쇠
+    box(0.03, 0.012, 0.18, dark, 0, 0.036, -0.03, rf);                      // 레일
+    rfMag = box(0.034, 0.12, 0.05, rfMetal, 0, -0.08, -0.06, rf); rfMag.rotation.x = 0.18;   // 탄창
+    const rgrip = box(0.032, 0.09, 0.04, rfPoly, 0, -0.07, 0.07, rf); rgrip.rotation.x = 0.3;
+    box(0.04, 0.06, 0.16, rfPoly, 0, -0.01, 0.18, rf);                      // 개머리
+    box(0.062, 0.08, 0.065, skin, 0.004, -0.07, 0.075, rf).rotation.x = 0.3;
+    box(0.05, 0.03, 0.07, skin, 0, -0.03, -0.2, rf);                        // 앞손
+    rfFlash = new T.Sprite(flash.material.clone()); rfFlash.position.set(0, 0.012, -0.42); rfFlash.visible = false; rf.add(rfFlash);
+    scopeF = mkScope(0.16, rf, 0.066, -0.04);
   };
   G.resize = (w, h) => { cam.aspect = w / h; cam.updateProjectionMatrix(); };
   G.cap = 6;   // 실린더 장탄 수 (계약 '외로운 총잡이'면 7)
   G.setCap = n => { const old = G.cap; G.cap = n; if (!st.reloading && st.ch.length < old) st.ammo = Math.min(n, st.ammo + (n > old ? 1 : 0)); };   // 이미 판정이 끝난 실린더엔 덤 1발을 주지 않는다(같은 실린더 두 번 판정 방지)
-  G.reset = () => { G.cap = 6; Object.assign(st, { ammo: 6, cd: 0, reloading: false, auto: -1, spent: 0, ev: 0, pose: 0, ch: [], streak: 0, hot: 0, fastRel: false, steady: false, cleanT: 0, slamT: 0, stat: { cyl: 0, clean: 0, perfect: 0, slam: 0, jam: 0 } }); Object.assign(sgs, { loaded: 0, reloading: false, rt: 0, ev: 0 });
+  G.reset = () => { G.cap = 6; G.hasRifle = false; G.setScope(false); Object.assign(rfs, { loaded: 0, reloading: false, rt: 0, ev: 0 }); if (rf) rf.visible = false; Object.assign(st, { ammo: 6, cd: 0, reloading: false, auto: -1, spent: 0, ev: 0, pose: 0, ch: [], streak: 0, hot: 0, fastRel: false, steady: false, cleanT: 0, slamT: 0, stat: { cyl: 0, clean: 0, perfect: 0, slam: 0, jam: 0 } }); Object.assign(sgs, { loaded: 0, reloading: false, rt: 0, ev: 0 });
     G.weapon = 'revolver'; G.hasShotgun = false; if (vm) { vm.visible = true; sg.visible = false; } };
   G.giveShotgun = () => { G.hasShotgun = true; sgs.loaded = 2; };
+  G.giveRifle = () => { G.hasRifle = true; rfs.loaded = RF_MAG; };
+  G.setScope = on => { G.hasScope = !!on; if (scopeR) scopeR.visible = scopeF.visible = !!on; };
+  G.rifleAmmo = () => (ZK.needs && ZK.needs.inv ? ZK.needs.inv.rifleAmmo || 0 : 0);
+  function rfReload() {
+    if (rfs.reloading || rfs.loaded >= RF_MAG || G.rifleAmmo() <= 0) return;
+    rfs.reloading = true; rfs.rt = 0; rfs.ev = 0;
+  }
   // ── 6발 리듬: 리볼버 한 발의 결과를 실린더에 기록 → 6발째에 판정 ──
   // 클린(6/6 명중): 장전 1.28 → 0.70초 · 실린더가 저절로 돎 · 사수 집중 사격 4초 / 퍼펙트(6/6 헤드샷): 다음 6발 '달군 탄'
   G.mark = function (res) {
@@ -117,8 +150,10 @@
   G.slamWindow = () => [ZK.needs && ZK.needs.s && ZK.needs.s.fatigue >= 70 ? 0.9 : 0.84, 1.0];
   // 1·2번 키로 바꿈 (0.35초 동안 못 쏨)
   G.switchTo = function (w) {
-    if (w === G.weapon || (w === 'shotgun' && !G.hasShotgun)) return false;
-    G.weapon = w; st.cd = 0.35; st.reloading = false; sgs.reloading = false; vm.visible = w === 'revolver'; sg.visible = w === 'shotgun';
+    if (w === G.weapon || (w === 'shotgun' && !G.hasShotgun) || (w === 'rifle' && !G.hasRifle)) return false;
+    G.weapon = w; st.cd = 0.35; st.reloading = false; sgs.reloading = false; rfs.reloading = false; vm.visible = w === 'revolver'; sg.visible = w === 'shotgun'; rf.visible = w === 'rifle';
+    st.auto = -1;   // 이전 무기가 걸어 둔 자동 장전이 새 무기에서 터지지 않게 (아래에서 새 무기가 비었으면 다시 건다)
+    if (w === 'rifle' && rfs.loaded === 0) st.auto = 0.35;
     st.riseV -= 6; ZK.audio.cylIn && ZK.audio.cylIn();
     if (w === 'revolver' && st.ammo === 0) st.auto = 0.35;   // 빈 리볼버로 바꾸면 곧 장전 (탄 0인 채 멈추던 문제)
     return true;
@@ -137,6 +172,16 @@
   G.canFire = () => !st.reloading && st.cd <= 0 && st.sprint < 0.3;
 
   G.fire = function () {
+    if (G.weapon === 'rifle') {   // 누르고 있으면 초당 10발 (game3d가 마우스를 누른 동안 매 프레임 shoot 호출)
+      if (rfs.reloading || st.cd > 0 || st.sprint >= 0.3) return false;
+      if (rfs.loaded <= 0) { ZK.audio.dry(); st.cd = 0.25; rfReload(); return false; }
+      rfs.loaded--; st.cd = Math.max(st.cd, -RF_INT * 0.5) + RF_INT; const adsK = 1 - st.ads * 0.5;   // 남은 시간을 넘겨 받아 프레임률과 상관없이 초당 10발
+      st.kickV += 1.5 * adsK; st.riseV += 13 * adsK; st.rollV += rand(-5, 5); st.flashT = 0.035;
+      rfFlash.material.rotation = rand(0, 6.283); rfFlash.scale.setScalar(rand(0.13, 0.19));
+      ZK.audio.rifleShot ? ZK.audio.rifleShot() : ZK.audio.shot();
+      if (rfs.loaded === 0) st.auto = 0.3;
+      return 'rifle';
+    }
     if (G.weapon === 'shotgun') {
       if (sgs.reloading || st.cd > 0 || st.sprint >= 0.3) return false;
       if (sgs.loaded <= 0) { ZK.audio.dry(); st.cd = 0.25; sgReload(); return false; }
@@ -160,6 +205,7 @@
   };
   G.reload = function () {
     if (G.weapon === 'shotgun') return sgReload();
+    if (G.weapon === 'rifle') return rfReload();
     if (st.reloading) return slam();
     if (st.ammo >= G.cap) return;
     st.jammed = false;   // 기록(ch)은 장전이 끝날 때 비운다 → 장전하는 동안 이번 실린더 결과가 HUD에 남음 · 6발 전에 장전하면 판정 없이 버려짐
@@ -195,12 +241,19 @@
       if (sgs.ev === 1 && sgs.rt >= 0.7) { sgs.ev = 2; ZK.audio.speedload(); }
       if (sgs.ev === 2 && sgs.rt >= 1.05) { const take = Math.min(2 - sgs.loaded, G.shells()); ZK.needs.inv.shell -= take; sgs.loaded += take; sgs.reloading = false; ZK.audio.cylIn(); st.kickV += 0.8; }
     }
+    if (rfs.reloading) {   // 자동소총: 탄창 빼고(0.35) → 끼우고(1.25) → 장전손잡이(1.8)
+      rfs.rt += dt * (ZK.needs ? ZK.needs.reloadK() : 1);
+      if (rfs.ev === 0 && rfs.rt >= 0.35) { rfs.ev = 1; ZK.audio.cylOut(); }
+      if (rfs.ev === 1 && rfs.rt >= 1.25) { rfs.ev = 2; ZK.audio.speedload(); }
+      if (rfs.ev === 2 && rfs.rt >= 1.8) { const take = Math.min(RF_MAG - rfs.loaded, G.rifleAmmo()); ZK.needs.inv.rifleAmmo -= take; rfs.loaded += take; rfs.reloading = false; ZK.audio.cylIn(); st.kickV += 0.8; }
+    }
     st.cleanT -= dt; st.slamT -= dt;
     if (st.reloading) { st.rt += dt * (ZK.surv ? ZK.surv.stats.reloadMul : 1) * (ZK.needs ? ZK.needs.reloadK() : 1) * (st.fastRel ? 1.83 : 1);   // 허기: 장전 느려짐 · 클린: 1.83배 빠름
       while (st.ev < RELOAD.length && st.rt >= RELOAD[st.ev][0]) reloadEvent(RELOAD[st.ev++][1]); }
     st.pose = damp(st.pose, st.reloading ? 1 : 0, 12, dt);
-    st.sprint = damp(st.sprint, ctx.sprint && !st.reloading ? 1 : 0, 10, dt);
-    st.ads = damp(st.ads, ctx.ads && !st.reloading && st.sprint < 0.5 ? 1 : 0, 14, dt);
+    const anyRel = st.reloading || rfs.reloading || sgs.reloading;   // 어느 무기든 장전 중이면 정조준이 풀린다
+    st.sprint = damp(st.sprint, ctx.sprint && !anyRel ? 1 : 0, 10, dt);
+    st.ads = damp(st.ads, ctx.ads && !anyRel && st.sprint < 0.5 ? 1 : 0, 14, dt);
     st.bob += dt * (ctx.air ? 0 : ctx.move * (ctx.sprint ? 13 : 9));
     st.swayX = damp(st.swayX, clamp(-ctx.mdx * 0.0009, -0.05, 0.05), 10, dt);
     st.swayY = damp(st.swayY, clamp(ctx.mdy * 0.0009, -0.05, 0.05), 10, dt);
@@ -211,15 +264,16 @@
     p.x += Math.sin(st.bob) * 0.011 * bobAmp + st.swayX;
     p.y += -Math.abs(Math.cos(st.bob)) * 0.009 * bobAmp + st.swayY + (ctx.air ? 0.015 : 0);
     p.z += st.kick * 0.06; p.y -= st.kick * 0.012;   // 뒤로 밀리며 손목이 살짝 꺾여 내려감
-    const act = G.weapon === 'shotgun' ? sg : vm, rel = G.weapon === 'shotgun' ? (sgs.reloading ? 1 : 0) : st.pose;
+    const act = G.weapon === 'shotgun' ? sg : G.weapon === 'rifle' ? rf : vm, rel = G.weapon === 'shotgun' ? (sgs.reloading ? 1 : 0) : G.weapon === 'rifle' ? (rfs.reloading ? 1 : 0) : st.pose;
     if (G.weapon === 'shotgun') { p.lerp(REL, rel * 0.6); brk.rotation.x = damp(brk.rotation.x, sgs.reloading && sgs.rt < 0.95 ? 0.55 : 0, 14, dt); }
+    if (G.weapon === 'rifle') { p.x += 0.025 * (1 - st.ads); p.y -= 0.035 * (1 - st.ads); p.z -= 0.03 * (1 - st.ads); p.lerp(REL, rel * 0.5); /* 소총은 길어서 지향사격 때 조금 더 아래·오른쪽 */ rfMag.position.y = damp(rfMag.position.y, rfs.reloading && rfs.ev === 1 ? -0.3 : -0.08, 14, dt); }   // 장전 중 탄창이 빠졌다 들어감
     act.position.copy(p);
     act.rotation.set(st.rise * 0.16 + st.sprint * -0.45 + st.pose * 0.25 + st.swayY * 2,
       st.sprint * 0.7 + st.swayX * 3 + st.ads * 0.0, st.roll * 0.05 + st.sprint * 0.35 + st.pose * 0.95 + Math.sin(st.bob) * 0.02 * bobAmp);
     hammer.rotation.x = -0.9 * st.hammer;
     cylG.rotation.z = -(st.cyl + st.spin) * (Math.PI / 3);
     cylPivot.rotation.z = st.pose * 0.9; cylPivot.position.x = -0.02 - st.pose * 0.02;
-    const on = st.flashT > 0; flash.visible = on && G.weapon === 'revolver'; sgFlash.visible = on && G.weapon === 'shotgun'; flashLight.intensity = on ? 6 : 0; flashLight.position.set(act.position.x, act.position.y + 0.02, act.position.z - 0.25);
+    const on = st.flashT > 0; flash.visible = on && G.weapon === 'revolver'; sgFlash.visible = on && G.weapon === 'shotgun'; rfFlash.visible = on && G.weapon === 'rifle'; flashLight.intensity = on ? 6 : 0; flashLight.position.set(act.position.x, act.position.y + 0.02, act.position.z - 0.25);
     sleeve.visible = st.ads < 0.98;
   };
   G.render = function (renderer) { renderer.clearDepth(); renderer.render(scene, cam); };

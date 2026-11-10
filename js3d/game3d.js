@@ -10,7 +10,7 @@
   const camera = new T.PerspectiveCamera(76, innerWidth / innerHeight, 0.05, 220); scene.add(camera);
   const muzzleLight = new T.PointLight(0xffb060, 0, 24, 1.5); scene.add(muzzleLight);   // 손맛: 섬광이 더 멀리 거리·좀비를 비춘다
   const boomLight = new T.PointLight(0xff4020, 0, 14, 1.6); scene.add(boomLight);
-  ZK.world.build(scene); ZK.fx3.init(scene); ZK.gun3.init(camera); ZK.player.init(camera, glc); ZK.char.init(scene); ZK.fort.init(scene); ZK.absorb.init(scene); ZK.needs.init(scene); ZK.mis.init(scene);
+  ZK.world.build(scene); ZK.fx3.init(scene); ZK.gun3.init(camera); ZK.player.init(camera, glc); ZK.char.init(scene); ZK.fort.init(scene); ZK.absorb.init(scene); ZK.needs.init(scene); ZK.mis.init(scene); ZK.arms.init(scene);
   const fpp = () => ZK.player.state.mode === 'fpp', S = () => ZK.surv.stats, F = ZK.fort.state, ps = ZK.player.state;
   ps.mountPos = new T.Vector3(); ps.mountVel = new T.Vector3();
   let W = 0, H = 0, dpr = 1;
@@ -30,7 +30,7 @@
       combo: 0, comboT: 0, bestCombo: 0, bestChain: 0, t: 0, spawnT: 1, hordeClock: 0, hordeWhy: '', noiseM: 0, noisePeak: null, rings: [], driveNoiseT: 0, recycleT: 2, sight: 12, bruteT: 60, carT: 15, hitT: 0, hitType: 'hit', hurtA: 0, overT: 0, overWhy: '', zapCd: 0, clingNoticed: false, finalWave: false, chaserT: 0, chasers: 0, hordes: 0, atk: new Map(), melee: 0, meleeT: 0, swarmT: 0, meleeCut: 0, deathBy: '', stuckH: [], stuckS: 0, stuckHint: 0, airN: 0, strikeN: 0, perfectN: 0, tierN: { crush: 0, launch: 0, shred: 0 }, quietT: 0, forceHorde: false, helmetN: 0, sacN: 0, dropN: 0, lastRamT: 0, blackout: false });
     if (g.clearSplats) g.clearSplats(); ZK.Zombie3.clearDebris();
     ZK.world.resetCars();   // 폐차 원위치 (트럭은 아래 mis.reset이 다시 놓는다) — 예전엔 직전 판 차 배치로 시작했다
-    ZK.fx3.reset(); ZK.player.reset(); ZK.gun3.reset(); ZK.fort.reset(); ZK.absorb.reset(); ZK.surv.reset(); ZK.needs.reset(); ZK.mis.reset(g); ZK.dread.reset(); g.chaserWarn = null; g.lastHorde = null; setNight(0); ZK.world.lightsOn();
+    ZK.fx3.reset(); ZK.player.reset(); ZK.gun3.reset(); ZK.fort.reset(); ZK.absorb.reset(); ZK.surv.reset(); ZK.needs.reset(); ZK.mis.reset(g); ZK.arms.reset(g); ZK.dread.reset(); g.chaserWarn = null; g.lastHorde = null; setNight(0); ZK.world.lightsOn();
     // B안: 버스 옆에 걸어서 시작 → 옆 배낭을 G로 챙기고(시작 꾸러미) → F로 탑승해 출발. 내리기·뒤지기·타기를 처음 30초에 배운다
     g.mode = 'foot'; ps.mounted = false; ps.pos.set(4.4, 0, 4.2); ps.vel.set(0, 0, 0); ps.yaw = Math.PI; ps.pitch = -0.12; g.tutor = 1; g.lastHeading = F.heading;
     for (let i = 0; i < 6; i++) spawn('walker', new T.Vector3(rand(-10, 10), 0, rand(-40, -25)), 'wander');   // 처음 6마리는 배회: 총을 쏘면 몰려온다
@@ -170,13 +170,15 @@
   // 사수·포탑·주행처럼 플레이어가 끌 수 없는 소리는 게이지를 조금만 올린다(합쳐도 초당 약 0.6 < 감소 0.8):
   // 예전 값(사수 0.15 · 포탑 0.4 · 주행 0.25)은 사격을 멈춰도 게이지가 계속 올라 '조용히 하면 덜 온다'가 성립하지 않았다
   // 사수·포탑 반경은 18·25 → 12·18m: 자동 무기가 주변을 다 깨우면 몰래 지나갈 틈이 없었다(1분 뒤 추적 83%)
-  const NOISE = { revolver: [35, 1.2], cannon: [18, 0.15], gunner: [12, 0.05], crash: [25, 2], burst: [20, 0.5], ram: [14, 0.3], search: [10, 0.4], shotgun: [40, 2], barrel: [30, 3], speaker: [45, 0], molotov: [20, 1.5], siren: [35, 2.5], boost: [18, 0.8], drive: [8, 0.15], idle: [4, 0.05] };
+  const NOISE = { revolver: [35, 1.2], cannon: [18, 0.15], gunner: [12, 0.05], crash: [25, 2], burst: [20, 0.5], ram: [14, 0.3], search: [10, 0.4], shotgun: [40, 2], barrel: [30, 3], speaker: [45, 0], molotov: [20, 1.5], siren: [35, 2.5], boost: [18, 0.8], drive: [8, 0.15], idle: [4, 0.05], cache: [16, 0.8], grenade: [50, 3], rifle: [45, 0.9] };   // cache: 무기 보급함 비틀기 · grenade: 수류탄 · rifle: 자동소총
   g.noise = function (kind, pos) {
     if (g.state !== 'play') return;
     const [r, gain] = NOISE[kind];
     g.noiseM = Math.min(100, g.noiseM + gain);
     if (gain > 0 && (!g.noisePeak || r >= g.noisePeak.r)) g.noisePeak = { x: pos.x, z: pos.z, r };   // 게이지를 안 올리는 소리(확성기)는 포위 위치가 되지 않는다
-    if (r >= 14) { g.rings.push({ x: pos.x, z: pos.z, r, t: 0.9, kind }); if (g.rings.length > 10) g.rings.shift(); }   // 레이더에 그릴 소음 원
+    const last = g.rings[g.rings.length - 1];
+    if (kind === 'rifle' && last && last.kind === 'rifle' && last.t > 0.5) { last.x = pos.x; last.z = pos.z; last.t = 0.9; }   // 연사는 원 하나를 갱신 (다른 소음 원을 밀어내지 않게)
+    else if (r >= 14) { g.rings.push({ x: pos.x, z: pos.z, r, t: 0.9, kind }); if (g.rings.length > 10) g.rings.shift(); }   // 레이더에 그릴 소음 원
     const r2 = r * r;
     for (const z of g.zombies) {
       if (!z.alive || z.aware === 'chase') continue;
@@ -220,6 +222,8 @@
       if (e.code === 'KeyT') ZK.mis.throwMolotov(g, camera);                                   // 화염병 던지기
       if (e.code === 'Digit1') ZK.gun3.switchTo('revolver');
       if (e.code === 'Digit2' && !ZK.gun3.switchTo('shotgun') && !ZK.gun3.hasShotgun) notice('산탄총이 없다 — 임무를 성공하면 얻는다', '#ccc');
+      if (e.code === 'Digit3' && !ZK.gun3.switchTo('rifle') && !ZK.gun3.hasRifle) notice('자동소총이 없다 — 주황 아이콘 무기 보급함을 걸어가서 열어라', '#ccc');
+      if (e.code === 'KeyB' && !e.repeat) ZK.arms.throwGrenade(g, camera);                       // 수류탄 던지기 (무기 보급함·수색)
     }
   });
 
@@ -234,6 +238,7 @@
   function shoot() {
     const fired = ZK.gun3.fire(); if (!fired) return;
     if (fired === 'shotgun') return shootShotgun();
+    if (fired === 'rifle') return shootRifle();
     g.shots++; g.noise('revolver', camera.position); ZK.needs.onShot();
     // 6발 리듬: 달군 탄(퍼펙트 보상) · 탁 닫기 뒤 첫 발(퍼짐 절반)
     const hot = ZK.gun3.takeHot(), steady = ZK.gun3.takeSteady(), railed = !!S().headBurst;
@@ -312,7 +317,7 @@
       F.rally = 3;
     }
     // 시체 폭발(오버킬)은 플레이어 사격으로 시작된 경우만 → '잭팟'의 가치를 지킨다
-    if (src === 'player' && depth < 12 && (overkill >= z.maxHp * S().okThresh || (head && depth === 0 && S().headBurst))) g.chainQ.push({ t: depth === 0 ? 0.13 : 0.07, z, dmg: overkill * 0.8, depth: depth + 1, air });
+    if (src === 'player' && depth < 12 && (overkill >= z.maxHp * S().okThresh || (head && depth === 0 && S().headBurst && ZK.gun3.weapon === 'revolver'))) g.chainQ.push({ t: depth === 0 ? 0.13 : 0.07, z, dmg: overkill * 0.8, depth: depth + 1, air });
   }
   function processChain(dt) {
     for (let i = g.chainQ.length - 1; i >= 0; i--) {
@@ -392,6 +397,40 @@
   };
   g.clearSplats = () => { for (const o of splats) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); } splats.length = 0; };
   // 산탄총: 8알을 한꺼번에 쏴서 맞은 좀비별로 피해를 합친다 (가까우면 한 방에 몸이 터진다)
+  // 자동소총 (무기 보급함): 한 발 24 · 머리 ×2.2 · 팔다리 ×0.75 · 관통 없음 · 6발 리듬에는 안 들어감(리볼버의 것)
+  // 리볼버 카드(매그넘 탄 등)는 받지 않는다 — 소총은 '주워 온 힘'이고, 탄이 떨어지면 끝
+  function shootRifle() {
+    g.shots++; g.noise('rifle', camera.position); ZK.needs.onShot(); ZK.arms.stats.rifleShots++;
+    const sp = ZK.player.spread(), adsK = ps.adsK || 0, a = rand(0, 6.283), r = Math.sqrt(Math.random()) * sp;
+    const dir = new T.Vector3(Math.cos(a) * r, Math.sin(a) * r, -1).normalize().applyQuaternion(ZK.player.aimQuat());
+    const rk = ZK.needs.recoilK(); ZK.player.kick(rand(0.008, 0.013) * (1 - adsK * 0.4) * rk, rand(-0.006, 0.006) * rk, 0.25);   // 연사라 화각 펀치·퍼짐 누적은 1/4
+    ZK.fx3.trauma(0.05); ZK.fx3.punch(0.006 * (1 - adsK * 0.4), rand(-0.003, 0.003), rand(-0.005, 0.005), 0.02);
+    const mz = ZK.gun3.muzzleWorld(); muzzleLight.position.copy(mz); muzzleLight.intensity = 6;
+    ray.set(ZK.player.aimOrigin(), dir); ray.far = 140;
+    const targets = ZK.world.solids.slice();
+    for (const z of g.zombies) { if (z.alive) { for (const m of z.hitMeshes) if (m.userData.part !== 'none') targets.push(m); } else if (z.flying && z.airMesh) targets.push(z.airMesh); }
+    let end = null;
+    for (const hit of ray.intersectObjects(targets, false)) {
+      const ud = hit.object.userData;
+      if (ud.part === 'air') { if (!ud.z.flying) continue; g.airHit(ud.z); g.hits++; end = hit.point; break; }
+      if (!ud.z && ud.barrel) { ZK.mis.blowBarrel(ud.barrel, g, 'player'); end = hit.point; break; }
+      if (!ud.z && ud.truck) { ZK.mis.hitTruck(ud.truck, g); ZK.fx3.sparks(hit.point, dir.clone().negate(), 4); end = hit.point; break; }
+      if (!ud.z && ud.bolt) { ZK.mis.hitBolt(ud.bolt, g); end = hit.point; break; }
+      if (!ud.z) { const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new T.Vector3(0, 1, 0); ZK.fx3.hole(hit.point, n, n.y > 0.7); end = hit.point; break; }
+      if (!ud.z.alive) continue;
+      const z = ud.z, head = ud.part === 'head', limb = ud.part === 'arm' || ud.part === 'leg', dmg = Math.round(24 * (head ? 2.2 : limb ? 0.75 : 1) * rand(0.95, 1.05));
+      g.hits++; end = hit.point;
+      const res = z.hit(ud.part, hit.point, dir, dmg, { mesh: hit.object }); if (!res) break;
+      if (res.helmet) { ZK.fx3.text(hit.point.clone().add(new T.Vector3(0, 0.5, 0)), '팅!', '#ffc81a', 18, 0.4); g.helmetN++; break; }
+      partNotes(z, res, hit.point);
+      if (!res.killed) ZK.fx3.impact(hit.point, head ? 'head' : 'body');
+      ZK.fx3.number(hit.point.clone().add(new T.Vector3(0, 0.3, 0)), res.dealt, head ? 'head' : 'body');
+      g.hitT = g.hitMax = res.killed ? 0.22 : 0.1; g.hitType = res.killed ? (head ? 'head' : 'kill') : 'hit';
+      if (res.killed) { ZK.arms.stats.rifleKills++; if (head) ZK.fx3.hitstop(0.04); onKill(z, head, res.overkill, 0, 'player'); }
+      break;   // 관통 없음
+    }
+    g.tracers.push({ a: mz, b: end ? end.clone() : camera.position.clone().addScaledVector(dir, 140), t: 0.04, col: '255,225,150' });
+  }
   function shootShotgun() {
     g.shots++; g.noise('shotgun', camera.position); ZK.needs.onShot(); ZK.needs.onShot();
     const rk = ZK.needs.recoilK(); ZK.player.kick(rand(0.085, 0.1) * rk, rand(-0.02, 0.02) * rk); ZK.fx3.trauma(0.42);
@@ -516,7 +555,7 @@
     h.strokeStyle = 'rgba(120,255,160,0.35)'; h.lineWidth = 2; h.stroke(); h.clip();
     h.strokeStyle = 'rgba(120,255,160,0.12)'; h.beginPath(); h.arc(cx, cy, R / 2, 0, 6.283); h.stroke();
     // 소음 원: 내 리볼버·충돌은 노랗게, 사수·포탑·폭발은 옅게 — 원 안의 배회 좀비가 몰려온다
-    for (const r of g.rings) { r.t -= real; if (r.t <= 0) continue; const [x, y] = pr(r), mine = r.kind === 'revolver' || r.kind === 'crash' || r.kind === 'boost';
+    for (const r of g.rings) { r.t -= real; if (r.t <= 0) continue; const [x, y] = pr(r), mine = r.kind === 'revolver' || r.kind === 'crash' || r.kind === 'boost' || r.kind === 'rifle' || r.kind === 'shotgun' || r.kind === 'grenade';
       h.strokeStyle = mine ? `rgba(255,214,90,${0.5 * r.t})` : `rgba(255,214,90,${0.18 * r.t})`; h.lineWidth = mine ? 2 : 1; h.beginPath(); h.arc(x, y, r.r * sc * (1.15 - r.t * 0.15), 0, 6.283); h.stroke(); }
     g.rings = g.rings.filter(r => r.t > 0);
     for (const car of ZK.world.cars) if (car.alive && !car.truck) { const [x, y] = pr(car.pos); h.fillStyle = '#9aa0a8'; h.fillRect(x - 3, y - 3, 6, 6); }
@@ -532,6 +571,7 @@
     { const [x, y] = pr(F.pos); h.save(); h.translate(x, y); h.rotate(yaw - F.heading); h.fillStyle = '#8fd18f'; h.fillRect(-F.halfW * sc, -F.halfL * sc, F.halfW * 2 * sc, F.halfL * 2 * sc); h.fillStyle = '#ffc81a'; h.fillRect(-F.halfW * sc, -F.halfL * sc, F.halfW * 2 * sc, 3); h.restore(); }   // 노란 쪽이 버스 앞
     h.fillStyle = '#fff'; const [px, py] = pr(ps.pos); h.beginPath(); h.moveTo(px, py - 6); h.lineTo(px - 4, py + 4); h.lineTo(px + 4, py + 4); h.fill();
     h.restore();
+    ZK.arms.drawRadar(h, cx, cy, R, c, yaw, sc);   // 무기 보급함 (내용물 색 마름모)
     // 소음 게이지 (레이더 아래): 100이 되면 포위 무리가 온다. 75부터 빨갛게 깜빡
     const nw = R * 2, nx = cx - R, ny = cy + R + 14, nk = clamp(g.noiseM / 100, 0, 1), hot = nk >= 0.75;
     h.fillStyle = 'rgba(0,0,0,0.55)'; h.fillRect(nx - 2, ny - 2, nw + 4, 12);
@@ -553,6 +593,7 @@
     g.tracers = g.tracers.filter(t => t.t > 0);
     ZK.fx3.drawScreen(h, W, H, real);   // 손맛 화면 섬광 (총구·처치·폭발·피격)
     ZK.fx3.drawTexts(h, camera, W, H);
+    ZK.arms.drawScope(h, W, H);   // 조준경 테두리 (HUD 글자 아래 · 판 진행 중에만 — scopeView가 확인)
     if (g.state === 'title') return drawTitle();
     g.hurtA = Math.max(0, g.hurtA - real * 1.2);
     const low = g.mode === 'foot' ? 1 - clamp(g.hp / 100, 0, 1) : 1 - clamp(F.hp / F.maxHp, 0, 1), va = Math.min(0.85, g.hurtA * 0.6 + Math.max(0, low - 0.5) * 0.9);
@@ -637,7 +678,14 @@
     h.font = '600 13px system-ui, sans-serif'; h.fillStyle = g.mode === 'foot' && nearFort(ps.pos, 2.5) ? '#ffe27a' : '#8a93a2'; h.fillText(hint, cx, H - 92);
     // 탄약: 산탄총이면 장전된 2발 + 남은 산탄, 아니면 리볼버 실린더
     const ax = 82, ay = H - 110;
-    if (ZK.gun3.weapon === 'shotgun') {
+    if (ZK.gun3.weapon === 'rifle') {
+      const rf = ZK.gun3.rf, M = ZK.gun3.RF_MAG; h.fillStyle = 'rgba(30,32,38,0.85)'; h.beginPath(); h.arc(ax, ay, 44, 0, 6.283); h.fill();
+      h.font = '900 26px system-ui, sans-serif'; h.textAlign = 'center'; h.textBaseline = 'middle'; h.fillStyle = rf.loaded > 8 ? '#f2f2ea' : '#ff8a5a'; h.fillText(String(rf.loaded), ax, ay - 6);
+      for (let i = 0; i < M; i++) { h.fillStyle = i < rf.loaded ? '#e8c860' : 'rgba(255,255,255,0.12)'; h.fillRect(ax - 30 + i * 2, ay + 12, 1.4, 7); }
+      h.font = '700 12px system-ui, sans-serif'; h.fillStyle = '#d8dce4'; h.fillText(`소총탄 ${ZK.gun3.rifleAmmo()}`, ax, ay + 30);
+      if (rf.reloading) { h.fillStyle = 'rgba(0,0,0,0.6)'; h.fillRect(ax - 36, ay - 76, 72, 6); h.fillStyle = '#e8c860'; h.fillRect(ax - 36, ay - 76, 72 * clamp(rf.rt / 1.8, 0, 1), 6); }
+      if (rf.loaded === 0 && !rf.reloading) label(ZK.gun3.rifleAmmo() ? 'R  장전' : '소총탄 없음 — 1번', ax + 60, ay, 18, '#ff5a4a', 'left');
+    } else if (ZK.gun3.weapon === 'shotgun') {
       const sgs = ZK.gun3.sg; h.fillStyle = 'rgba(30,32,38,0.85)'; h.beginPath(); h.arc(ax, ay, 44, 0, 6.283); h.fill();
       for (let i = 0; i < 2; i++) { const x = ax - 12 + i * 24; h.fillStyle = '#0d0e10'; h.beginPath(); h.arc(x, ay - 4, 11, 0, 6.283); h.fill();
         if (i < sgs.loaded) { h.fillStyle = '#b8261c'; h.beginPath(); h.arc(x, ay - 4, 9, 0, 6.283); h.fill(); h.fillStyle = '#d8b04a'; h.beginPath(); h.arc(x, ay - 4, 4, 0, 6.283); h.fill(); } }
@@ -664,8 +712,12 @@
       h.fillStyle = '#fff'; h.fillRect(bx2 + w2 * k - 1, by2 - 2, 2, 10); }
     }
     h.font = '600 11px system-ui, sans-serif'; h.fillStyle = '#8a93a2'; h.textAlign = 'center';
-    h.fillText(`1 리볼버 · 2 산탄총${ZK.gun3.hasShotgun ? '' : '(없음)'} · T 화염병 ${ZK.needs.inv ? ZK.needs.inv.molotov || 0 : 0}`, ax, ay + 58);
+    { const inv = ZK.needs.inv || {}, G3 = ZK.gun3;   // 무기 줄 (조준경은 리볼버 옆 ⊕) · 길어서 왼쪽 정렬
+      const mw = Math.max(90, W / 2 - 236);   // 가운데 버스 체력 막대와 겹치지 않게 두 줄 · 최대 폭
+      h.textAlign = 'left'; h.fillText(`1 리볼버${G3.hasScope ? '⊕' : ''} · 2 산탄총${G3.hasShotgun ? '' : '(없음)'} · 3 소총${G3.hasRifle ? '' : '(없음)'}`, 14, ay + 54, mw);
+      h.fillText(`T 화염병 ${inv.molotov || 0} · B 수류탄 ${inv.grenade || 0}`, 14, ay + 68, mw); h.textAlign = 'center'; }
     ZK.mis.drawHUD(h, W, H, g, label);
+    ZK.arms.drawHUD(h, W, H, g, label);   // 조준경 화면 · 가까운 무기 보급함 안내
     ZK.needs.draw(h, W, H, g, label);
     ZK.surv.draw(h, W, H);
     if (g.state === 'pause') { h.fillStyle = 'rgba(0,0,0,0.55)'; h.fillRect(0, 0, W, H); label('일시정지', cx, cy - 20, 48); label('클릭해서 계속', cx, cy + 40, 24, '#ccc'); }
@@ -751,7 +803,7 @@
     if (drive && playing && !choosing) ps.yaw += F.heading - g.lastHeading;   // 버스가 돌면 시선도 같이 돈다 (운전대를 꺾었는데 화면이 그대로라 '안 돈다'고 느꼈다)
     if (drive) { ps.mountPos.copy(ZK.fort.deckPoint()); ps.mountVel.copy(ZK.fort.forward()).multiplyScalar(F.speed); }
     const m = ZK.player.mouseFrame();
-    if ((playing && !choosing) || g.state === 'title') ZK.player.update(real, { ads: mouseR, reloading: ZK.gun3.state.reloading, firing: mouseL });
+    if ((playing && !choosing) || g.state === 'title') ZK.player.update(real, { ads: mouseR, reloading: ZK.gun3.state.reloading || ZK.gun3.rf.reloading || ZK.gun3.sg.reloading, firing: mouseL });
     if (playing && !choosing && mouseL) shoot();
     ZK.gun3.update(real, { ads: mouseR, sprint: ps.sprint, move: ps.move, air: !ps.onGround, mdx: m.mdx, mdy: m.mdy });
     ZK.char.setVisible(!fpp()); ZK.char.update(real, ps, ZK.gun3.state);
@@ -759,7 +811,7 @@
     ZK.dread.update(dt, g, camera);   // 공포 디렉터: 위협도·심장박동·긴장 음악 + 추격 규칙(z.rush) — 좀비 이동보다 먼저
     if (playing || g.state === 'over' || g.state === 'win') {
       if (playing && !choosing) {
-        g.t += dt; director(dt); ZK.absorb.update(dt, g);
+        g.t += dt; director(dt); ZK.arms.update(dt, g); ZK.absorb.update(dt, g);
         if ((g.comboT -= dt) <= 0) g.combo = 0;
         ZK.needs.update(dt, g); ZK.mis.update(dt, g); g.quietT -= dt;
         // 밤 (7:00~): 30초에 걸쳐 어두워지고 안개가 짙어진다 · 좀비 시야 12 → 17m · 포위 +25%
@@ -786,7 +838,7 @@
     muzzleLight.intensity *= Math.exp(-real * 32); boomLight.intensity *= Math.exp(-real * 9);
     if (ZK.debug3.fast) { scene.updateMatrixWorld(); g.tracers.length = 0; g.notices.length = 0; return; }   // 개발용: 렌더 없이 빠른 시뮬레이션 (판정용 위치 행렬은 갱신)
     renderer.clear(); renderer.render(scene, camera);
-    if (g.state !== 'title' && fpp()) ZK.gun3.render(renderer);
+    if (g.state !== 'title' && fpp() && !ZK.arms.scopeView()) ZK.gun3.render(renderer);   // 조준경으로 들여다볼 땐 총을 그리지 않는다
     drawHUD(real);
   }
   ZK.debug3.renderer = renderer;

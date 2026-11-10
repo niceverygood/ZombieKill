@@ -3,8 +3,11 @@
 (function () {
   const T = THREE, { rand, clamp } = ZK;
   const N = {};
-  const ITEMS = { can: '통조림', water: '생수', bandage: '붕대', fuelcan: '연료통', pill: '진통제', anti: '항생제', scrap: '고철', cloth: '천', bottle: '술병', wood: '목재', shell: '산탄', molotov: '화염병' };
-  const LOOT = [['can', 22], ['water', 24], ['bandage', 12], ['fuelcan', 11], ['pill', 8], ['shell', 12], ['molotov', 5], ['scrap', 6], ['cloth', 6], ['bottle', 4], ['wood', 3]];   // 산탄은 한 번에 4발
+  const ITEMS = { can: '통조림', water: '생수', bandage: '붕대', fuelcan: '연료통', pill: '진통제', anti: '항생제', scrap: '고철', cloth: '천', bottle: '술병', wood: '목재', shell: '산탄', molotov: '화염병', rifleAmmo: '소총탄', grenade: '수류탄', scope: '조준경', rifle: '자동소총' };
+  const LOOT = [['can', 22], ['water', 24], ['bandage', 12], ['fuelcan', 11], ['pill', 8], ['shell', 12], ['molotov', 5], ['scrap', 6], ['cloth', 6], ['bottle', 4], ['wood', 3], ['grenade', 3], ['rifleAmmo', 4]];   // 산탄은 한 번에 4발 · 수류탄 1개 · 소총탄 15발 (무기 보급함보다 적게)
+  // 한 번에 얻는 개수 (무기 보급함은 arms3d가 fixed와 qty로 따로 정한다) · 조준경·자동소총은 개수가 아니라 장착 → ZK.arms.onLoot
+  const QTY = { shell: 4, rifleAmmo: 15 }, EQUIP = { scope: true, rifle: true };
+  N.QTY = QTY;
   const LOOT_SUM = LOOT.reduce((a, [, w]) => a + w, 0);
   const SEARCH_T = 2.5, REACH = 1.8;   // 1.5초는 봇 원정이 4~5초로 끝나 위험이 없었다
   N.ITEMS = ITEMS;
@@ -47,13 +50,15 @@
 
   N.reset = function () {
     N.s = { fuel: 100, hunger: 100, thirst: 100, fatigue: 0, infection: 0, infected: false, bleeding: false };
-    N.inv = { can: 0, water: 0, bandage: 0, fuelcan: 0, pill: 0, anti: 0, scrap: 0, cloth: 0, bottle: 0, wood: 0, shell: 0, molotov: 0 };   // 시작 꾸러미(통조림·생수·붕대)는 출발 배낭 안에
+    N.inv = { can: 0, water: 0, bandage: 0, fuelcan: 0, pill: 0, anti: 0, scrap: 0, cloth: 0, bottle: 0, wood: 0, shell: 0, molotov: 0, rifleAmmo: 0, grenade: 0 };   // 시작 꾸러미(통조림·생수·붕대)는 출발 배낭 안에
     N.search = null; N.searched = 0; N.useT = 0; N.msg = null;
     for (const p of N.points) { p.done = false; p.edge.visible = true; p.ring.visible = true; p.mesh.material.color.setHex(p.name === '상점 셔터' ? 0x4a4e54 : 0x4a5a3a); }
   };
   N.s = null;
 
-  const roll = () => { let r = Math.random() * LOOT_SUM; for (const [k, w] of LOOT) { if ((r -= w) < 0) return k; } return 'can'; };
+  // 봇 A/B로 무기 보급함을 끄면(ZK.arms.off) 수류탄·소총탄도 수색에서 빼서 '이 기능 전' 판과 같게
+  const roll = () => { const L = ZK.arms && ZK.arms.off ? LOOT.filter(([k]) => k !== 'grenade' && k !== 'rifleAmmo') : LOOT, sum = L.reduce((a, [, w]) => a + w, 0);
+    let r = Math.random() * sum; for (const [k, w] of L) { if ((r -= w) < 0) return k; } return 'can'; };
   N.give = function (k, n = 1) { N.inv[k] = (N.inv[k] || 0) + n; };
 
   // ── 효과: 수치는 바로 죽이지 않고 손맛·사수를 무디게 한다 (0이 되면 걸을 때만 체력이 깎임) ──
@@ -114,22 +119,28 @@
     if (s.bleeding) { g.hp -= 2 * dt * (ZK.meta ? ZK.meta.bleedK() : 1); g.regenT = Math.max(g.regenT, 0.5); }
     if (g.mode === 'foot') { if (s.hunger <= 0) g.hp -= dt; if (s.thirst <= 0) g.hp -= dt; }
     if (s.infection >= 100) { g.hp = 0; g.deathBy = '감염으로 사망'; }
-    else if (g.hp <= 0 && s.bleeding) g.deathBy = '출혈로 사망';
+    else if (g.hp <= 0 && s.bleeding && !g.deathBy) g.deathBy = '출혈로 사망';   // 내 수류탄 등 다른 원인이 먼저 적혔으면 그대로
     // 경고 (한 번씩)
     for (const [key, v, text] of [['fuel', s.fuel, '연료가 바닥났다 — 연료통을 찾아라'], ['thirst', s.thirst, '목이 마르다 — 생수를 찾아라'], ['hunger', s.hunger, '배가 고프다 — 통조림을 찾아라']]) {
       const flag = 'warn_' + key; if (v < 25 && !s[flag]) { s[flag] = true; say(text, '#ffb24a', g); } if (v > 40) s[flag] = false;
     }
     // 수색: 걸어서 지점 1.8m 안 + G를 1.5초 누르고 있기 (소음 6m)
-    const p = g.mode === 'foot' ? N.nearPoint(ps.pos) : null;
+    // 버스 차체 안에 서서는 못 뒤진다: 버스를 상자 위에 세우고 그 밑에서 열면 경비가 차체에 밀려 닿지 못했다(무기 보급함 무위험 줍기)
+    // 시동 걸기(bail)·무기고 털기(raid)의 G와 겹치면 그쪽이 먼저
+    const L = ZK.fort.local(ps.pos), inBus = !(ZK.bail && ZK.bail.wrecked) && Math.abs(L.lx) < F.halfW + 0.5 && Math.abs(L.lz) < F.halfL + 0.5;
+    let p = g.mode === 'foot' && !(ZK.bail && ZK.bail.prompt) && !(ZK.raid && ZK.raid.prompt) ? N.nearPoint(ps.pos) : null;
+    if (p && inBus) { if (k.KeyG && !(N.msg && N.msg.bus)) N.msg = { text: '버스 밑에선 못 연다 — 버스를 비켜 세워라', t: 1.4, bus: true }; p = null; }
     N.prompt = p;
     if (p && k.KeyG) {
-      if (!N.search || N.search.p !== p) { N.search = { p, t: 0 }; g.noise && g.noise('search', ps.pos); }
+      if (!N.search || N.search.p !== p) { N.search = { p, t: 0 }; g.noise && g.noise(p.noise || 'search', ps.pos); }   // 무기 보급함은 쇠 상자를 비트는 큰 소리(p.noise)
       N.search.t += dt;
-      if (N.search.t >= SEARCH_T) {
+      if (N.search.t >= (p.holdT || SEARCH_T)) {   // 무기 보급함은 더 오래 (p.holdT)
         p.done = true; p.edge.visible = false; p.ring.visible = false; p.mesh.material.color.setHex(0x2a2c30); N.searched++;
         const got = p.fixed ? p.fixed.slice() : Math.random() < 0.35 ? [] : Array.from({ length: Math.random() < 0.45 ? 2 : 1 }, roll);   // 빈손 35%
-        got.forEach(it => N.give(it, it === 'shell' ? 4 : 1));
-        const text = got.length ? got.map(it => '+' + ITEMS[it] + (it === 'shell' ? ' 4' : '')).join(' ') : '빈손';
+        const qty = it => (p.qty && p.qty[it]) || QTY[it] || 1;
+        got.forEach(it => { if (EQUIP[it]) ZK.arms && ZK.arms.onLoot(it, g); else N.give(it, qty(it)); });
+        const text = got.length ? got.map(it => '+' + ITEMS[it] + (EQUIP[it] || qty(it) === 1 ? '' : ' ' + qty(it))).join(' ') : '빈손';
+        if (p.cache) ZK.arms && ZK.arms.onOpen(p, g);   // 보급함 열림: 경비가 깨고 기록
         ZK.fx3.text(p.pos.clone().setY(1.8), text, got.length ? '#ffd23a' : '#9aa0a8', 26, 1.1);
         ZK.audio.absorb && ZK.audio.absorb(); N.search = null; N.lastLoot = { t: g.t, got };
       }
@@ -163,7 +174,7 @@
     if (N.prompt && g.mode === 'foot') {
       const cx = W / 2, cy = H / 2;
       label(`G 길게 — ${N.prompt.name} 수색`, cx, cy + 70, 18, '#ffd23a');
-      if (N.search) { const k = clamp(N.search.t / SEARCH_T, 0, 1);
+      if (N.search) { const k = clamp(N.search.t / (N.search.p.holdT || SEARCH_T), 0, 1);
         h.strokeStyle = 'rgba(0,0,0,0.6)'; h.lineWidth = 7; h.beginPath(); h.arc(cx, cy, 26, 0, 6.283); h.stroke();
         h.strokeStyle = '#ffd23a'; h.lineWidth = 4; h.beginPath(); h.arc(cx, cy, 26, -Math.PI / 2, -Math.PI / 2 + k * 6.283); h.stroke(); }
     }

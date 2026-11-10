@@ -40,7 +40,7 @@
     addEventListener('mousemove', e => {
       st.cx = e.clientX; st.cy = e.clientY;   // 마우스 잠금이 안 될 때 가장자리 회전용 커서 위치
       if (!st.locked) return;
-      const s = SENS * (st.aimK > 0.5 ? 0.65 : 1);
+      const s = SENS * (st.aimK > 0.5 ? (scoped() ? 0.32 : 0.65) : 1);   // 조준경 확대 중엔 더 느리게
       if (st.freeLook) { st.lookYaw = clamp(st.lookYaw - e.movementX * s, -1.9, 1.9); st.lookPitch = clamp(st.lookPitch - e.movementY * s, -1.1, 1.1); }
       else { st.yaw -= e.movementX * s; st.pitch = clamp(st.pitch - e.movementY * s, -1.4, 1.4); mdx += e.movementX; mdy += e.movementY; }
     });
@@ -50,7 +50,7 @@
     st.recP = st.recY = st.recPV = st.recYV = 0; st.bloom = 0; st.stance = 'stand'; st.vaulting = false; st.onGround = true;
   };
   P.mouseFrame = () => { const r = { mdx, mdy }; mdx = mdy = 0; return r; };
-  P.kick = function (up, side) {
+  P.kick = function (up, side, fx = 1) {   // fx: 화각 펀치·퍼짐 누적 배율 (자동소총은 연사라 0.25)
     st.pitch = clamp(st.pitch + up * 0.35, -1.4, 1.4); st.yaw += side * 0.35;
     st.recPV += up * 0.65 * 22; st.recYV += side * 0.65 * 22;
     st.fovPunch += 3.2; st.bloom = Math.min(1, st.bloom + 0.55);
@@ -58,8 +58,10 @@
   // 화각 펀치: +면 밖으로 확 넓어짐(발사·폭발), −면 확 당겨짐(헤드샷 처치 '줌 펀치')
   P.fovKick = n => { st.fovPunch += n * (ZK.fx3 ? ZK.fx3.J : 1); };
   // 탄 퍼짐: 엎드림 < 앉음 < 섬, 조준하면 크게 줄고, 움직이거나 공중이면 커짐
+  // 조준경(무기 보급함): 리볼버·자동소총을 정조준하면 화각 30°(약 2.5배) · 퍼짐 ×0.4
+  const scoped = () => !!(ZK.gun3 && ZK.gun3.hasScope && (ZK.gun3.weapon === 'revolver' || ZK.gun3.weapon === 'rifle'));
   P.spread = function () {
-    const a = st.aimK, stanceMul = st.stance === 'prone' ? 0.5 : st.stance === 'crouch' ? 0.75 : 1;
+    const a = st.aimK, stanceMul = (st.stance === 'prone' ? 0.5 : st.stance === 'crouch' ? 0.75 : 1) * (scoped() ? lerp(1, 0.4, a) : 1) * (ZK.gun3 && ZK.gun3.weapon === 'rifle' ? 1.25 : 1);   // 소총은 연사라 한 발 퍼짐이 조금 크다
     return (lerp(st.mode === 'tpp' ? 0.024 : 0.02, 0.0025, a) + st.move * lerp(0.028, 0.006, a) + st.bloom * lerp(0.03, 0.008, a)) * stanceMul
       + (st.onGround && !st.vaulting ? 0 : 0.06) + (ZK.needs ? ZK.needs.sway() : 0);   // 갈증·피로: 조준이 흔들림
   };
@@ -171,7 +173,7 @@
     }
     // 흔들림·펀치의 위치 성분: 화면이 옆·위로 떨리고, 발사하면 뒤로 '쿵' 밀린다 (조준·판정은 회전만 따르므로 영향 없음)
     cam.position.addScaledVector(_r, sh.x).y += sh.y; cam.position.addScaledVector(_f, -sh.back);
-    const fovT = fpp ? lerp(st.sprint ? 84 : 76, 56, st.aimK) : lerp(st.sprint ? 78 : 72, 60, st.aimK);
+    const fovT = fpp ? lerp(st.sprint ? 84 : 76, scoped() ? 30 : 56, st.aimK) : lerp(st.sprint ? 78 : 72, scoped() ? 40 : 60, st.aimK);
     st.fov = damp(st.fov, fovT, 10, dt);
     cam.fov = st.fov + clamp(st.fovPunch, -9, 12) - (ZK.dread ? ZK.dread.tunnel : 0); cam.updateProjectionMatrix();   // 쫓길수록 시야가 좁아진다(최대 6°)
   };
