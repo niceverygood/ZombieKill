@@ -238,7 +238,7 @@
     const inside = foot && P.inside(ps.pos);
     if (inside !== darkOn) setDark(inside, g);
     if (inside) { P.stats.insideT += dt; if (P.stats.enterT === null) { P.stats.enterT = Math.round(g.t); P.stats.hp0 = g.hp; }
-      if (!P.hinted) { P.hinted = true; g.onNotice('경찰서 안 — 책상·사물함 G 1.8초 · 파란 상자 = 금고·무기고(G 4초, 무기고를 털면 경보)', '#7ab0ff'); } }
+      if (!P.hinted) { P.hinted = true; g.onNotice('경찰서 안 — 책상·사물함·파란 상자(금고·무기고)는 F로 바로 줍기 · 무기고를 털면 경보', '#7ab0ff'); } }
     // 경광등: 경보가 울리면 빠르게 번쩍 · 사이렌을 20초 동안 4초마다 다시 울려 주변을 계속 부른다
     const tt = ZK.fx3.time * (P.alarm ? 9 : 2.5); if (P.beacon) { P.beacon[0].visible = Math.sin(tt) > 0; P.beacon[1].visible = Math.sin(tt) <= 0; }
     if (P.alarm && P.stats.alarmT !== null && g.t - P.stats.alarmT < 20 && (sirenT -= dt) <= 0) { sirenT = 4; g.noise('siren', P.DOOR); }

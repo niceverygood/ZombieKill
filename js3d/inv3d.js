@@ -17,7 +17,7 @@
   I.holdFire = () => I.open || !!I.throwSel;   // game3d: 이게 참이면 총을 쏘지 않는다
 
   function equip(w, g) {
-    if (w === 'bat' && g.mode !== 'foot') { g.onNotice('방망이는 걸어서만 — 버스에서 내려(F) 휘둘러라', '#ccc'); return false; }
+    if (w === 'bat' && g.mode !== 'foot') { g.onNotice('방망이는 걸어서만 — 버스에서 내려(G) 휘둘러라', '#ccc'); return false; }
     if (!has(w)) { if (MISSING[w]) g.onNotice(MISSING[w], '#ccc'); return false; }
     const wasThrow = !!I.throwSel; I.throwSel = null;
     if (!G3().switchTo(w) && wasThrow) ZK.audio.cylIn && ZK.audio.cylIn();   // 같은 총이면 다시 꺼내기만

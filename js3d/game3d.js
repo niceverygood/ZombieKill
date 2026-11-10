@@ -1,4 +1,4 @@
-// 메인: 이동 요새 서바이벌 — 요새 운전 + 지붕에서 리볼버(1인칭) · 하차(F)해서 걷기 · 들이받기 · 흡수 성장 · 레벨업 카드
+// 메인: 이동 요새 서바이벌 — 요새 운전 + 지붕에서 리볼버(1인칭) · 하차(G)해서 걷기 · 들이받기 · 흡수 성장 · 레벨업 카드
 // 10분 생존 · 사방 포위 웨이브 · 엘리트(덩치) · 레이더 · HUD
 (function () {
   const T = THREE, { rand, clamp } = ZK;
@@ -33,7 +33,7 @@
     g.batSwings = g.batHits = g.batKills = 0; g.batHitT = 0;   // 방망이 집계 (판마다 — 예전엔 안 지워져 판 사이에 쌓였다)
     g.shakeT = 0; g.shakeCd = 0; g.shakeN = 0; g.hordeCapped = 0; g.stuckCut = 0;   // 털어내기 · 포위 상한 · 끼임 상한 횟수 (실력 맞춤 디렉터) — g.bailT 초기화는 아래 bail 리셋 줄에 있다
     ZK.fx3.reset(); ZK.inv.reset(); ZK.player.reset(); ZK.gun3.reset(); ZK.fort.reset(); ZK.absorb.reset(); ZK.surv.reset(); ZK.needs.reset(); ZK.mis.reset(g); ZK.arms.reset(g); ZK.mart.reset(g); ZK.police.reset(g); ZK.dread.reset(); ZK.tide.reset(); ZK.raid.reset(); ZK.torch.reset(); ZK.bail.reset(); ZK.tower.reset(g); g.bailT = -99; g.chaserWarn = null; g.lastHorde = null; setNight(0); ZK.world.lightsOn();
-    // B안: 버스 옆에 걸어서 시작 → 옆 배낭을 G로 챙기고(시작 꾸러미) → F로 탑승해 출발. 내리기·뒤지기·타기를 처음 30초에 배운다
+    // B안: 버스 옆에 걸어서 시작 → 옆 배낭을 F로 챙기고(시작 꾸러미) → G로 탑승해 출발. 내리기·뒤지기·타기를 처음 30초에 배운다
     g.mode = 'foot'; ps.mounted = false; ps.pos.set(4.4, 0, 4.2); ps.vel.set(0, 0, 0); ps.yaw = Math.PI; ps.pitch = -0.12; g.tutor = 1; g.lastHeading = F.heading;
     for (let i = 0; i < 6; i++) spawn('walker', new T.Vector3(rand(-10, 10), 0, rand(-40, -25)), 'wander');   // 처음 6마리는 배회: 총을 쏘면 몰려온다
     notice('배낭을 챙겨라 — 노란 고리에서 F', '#ffd23a');

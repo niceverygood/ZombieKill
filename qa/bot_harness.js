@@ -97,7 +97,7 @@
       if (g.mode !== 'drive') { tr.phase = 'walk'; return true; }
       const d = Math.hypot(tr.p.pos.x - F.pos.x, tr.p.pos.z - F.pos.z);
       if (tr.t > (CITY() ? 60 : 30)) { B.skip.set(tr.p, g.t + 40); B.trip = null; B.tripCd = 3; return false; }   // 못 다가가면 포기
-      if (d < 8.5) { const nb = ZK.surv.contract.has('nobrake'); k.KeyW = false; k.KeyS = nb && F.speed > 0.5; k.Space = !nb; k.KeyA = k.KeyD = false;   /* 브레이크 철거면 S로 감속 */ if (Math.abs(F.speed) < 1.5) { press('KeyF'); tr.phase = 'walk'; tr.t2 = 0; } return true; }
+      if (d < 8.5) { const nb = ZK.surv.contract.has('nobrake'); k.KeyW = false; k.KeyS = nb && F.speed > 0.5; k.Space = !nb; k.KeyA = k.KeyD = false;   /* 브레이크 철거면 S로 감속 */ if (Math.abs(F.speed) < 1.5) { press('KeyG'); tr.phase = 'walk'; tr.t2 = 0; } return true; }
       if (d < 20 && B.revT <= 0) {   // 가까워지면 초속 3m로 천천히 다가간다 (벽 앞 지점에 그대로 박지 않게)
         const fw = ZK.fort.forward(), dx = tr.p.pos.x - F.pos.x, dz = tr.p.pos.z - F.pos.z, side = Math.cos(F.heading) * dx - Math.sin(F.heading) * dz, ahead = fw.x * dx + fw.z * dz;
         let st2 = Math.max(-1, Math.min(1, side / 4)); if (ahead < 0) st2 = side >= 0 ? 1 : -1;
@@ -111,12 +111,12 @@
     tr.t2 = (tr.t2 || 0) + dt;
     if (tr.phase !== 'return' && (g.hp < 45 || tr.t2 > 30 || tr.p.done && tr.phase === 'walk')) tr.phase = 'return';
     if (tr.phase === 'walk') { const l = go(tr.p.pos.x, tr.p.pos.z); if (l < 1.3) { tr.phase = 'search'; } return true; }
-    if (tr.phase === 'search') { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyG = true; if (tr.p.done || !N.prompt) { k.KeyG = false; tr.phase = 'return'; } return true; }
+    if (tr.phase === 'search') { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyF = true; if (tr.p.done || !N.prompt) { k.KeyF = false; tr.phase = 'return'; } return true; }
     if (tr.phase === 'return') {
-      k.KeyG = false;
+      k.KeyF = false;
       if (g.mode === 'drive') { B.trip = null; B.tripCd = 4; for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft']) k[c] = false; return false; }
       const L = ZK.fort.local(ps2.pos);
-      if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyF'); return true; }
+      if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyG'); return true; }
       go(F.pos.x, F.pos.z); return true;
     }
     return false;
@@ -127,7 +127,7 @@
     const Bl = ZK.bail, tp = Bl.toLZ ? (ZK.mis.runTo ? ZK.mis.runTo(g) : ZK.mis.lz) : Bl.car && Bl.car.pos; B.trip = null; B.goal = null;
     if (!tp) return false;
     if (Bl.prompt) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyG = true; return true; }
-    k.KeyG = false;
+    k.KeyG = false;   // 시동은 차라서 G (줍기 F와 따로)
     if (Bl.toLZ && Math.hypot(tp.x - ps.pos.x, tp.z - ps.pos.z) < 6) { if (ZK.tower) return false; k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; return true; }
     const dx = tp.x - ps.pos.x, dz = tp.z - ps.pos.z, l = Math.hypot(dx, dz) || 1, sy = Math.sin(ps.yaw), cy = Math.cos(ps.yaw);
     let df = (dx * -sy + dz * -cy) / l, dr = (dx * cy + dz * -sy) / l;
@@ -160,14 +160,14 @@
       B.mart = { phase: 'drive', t: 0, n: 0, skip: new Set() }; R.martTrips = (R.martTrips || 0) + 1; log('MART_TRIP');
     }
     const m = B.mart; m.t += dt;
-    const stopKeys = () => { for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG']) k[c] = false; };
+    const stopKeys = () => { for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG', 'KeyF']) k[c] = false; };
     const end = cd => { B.mart = null; B.martGoal = null; B.martCd = cd; stopKeys(); };
     if (m.phase === 'drive') {
       if (g.mode !== 'drive') { m.phase = 'in'; m.t2 = 0; return true; }
       if (m.t > 100) { end(60); R.martGiveUp = (R.martGiveUp || 0) + 1; return false; }   // 100초 안에 못 닿으면 포기
       const d = Math.hypot(M.LOT.x - F.pos.x, M.LOT.z - F.pos.z);
       if (d < 9) { B.martGoal = null; const nb = ZK.surv.contract.has('nobrake'); k.KeyW = false; k.Space = !nb; k.KeyS = nb && F.speed > 0.5; k.KeyA = k.KeyD = false;
-        if (Math.abs(F.speed) < 1.5) { press('KeyF'); m.phase = 'in'; m.t2 = 0; if (R.martParkT == null) R.martParkT = Math.round(g.t); } return true; }
+        if (Math.abs(F.speed) < 1.5) { press('KeyG'); m.phase = 'in'; m.t2 = 0; if (R.martParkT == null) R.martParkT = Math.round(g.t); } return true; }
       B.martGoal = M.LOT; return false;   // 운전은 driveStep이 (길 따라)
     }
     if (g.mode === 'drive') { end(M.got() >= 3 || g.hp < 70 || R.martTrips >= 3 ? 999 : 45); return false; }   // 다시 탔으면 원정 끝 (물자가 남았고 체력 70 이상이면 45초 뒤 한 번 더 · 최대 3번)
@@ -192,20 +192,20 @@
       }
       const P = m.p, dp = Math.hypot(P.pos.x - ps.pos.x, P.pos.z - ps.pos.z);
       const threat = !!B.losZ && B.losZ.alive && B.losZ.pos.distanceTo(ps.pos) < 6;   // 보이는 놈이 6m 안 (진열대 너머는 무시하고 계속 뒤진다)
-      if (threat && dp < 6) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = k.KeyG = false; return true; }   // 6m 안에 달려드는 놈이 있으면 먼저 쏜다 (뒤지는 중엔 못 피함)
+      if (threat && dp < 6) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = k.KeyF = false; return true; }   // 6m 안에 달려드는 놈이 있으면 먼저 쏜다 (뒤지는 중엔 못 피함)
       if (dp < 1.2) {   // 뒤지기: G를 누르고 버틴다 (끝나면 done) · 너무 오래 걸리면 건너뜀
-        k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyG = true; m.st += dt;
-        if (P.done) k.KeyG = false;
-        else if (m.st > (P.holdT || 2) + 4) { k.KeyG = false; m.skip.add(P); }
+        k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyF = true; m.st += dt;
+        if (P.done) k.KeyF = false;
+        else if (m.st > (P.holdT || 2) + 4) { k.KeyF = false; m.skip.add(P); }
         return true;
       }
-      k.KeyG = false; if (!m.wp) m.wp = M.path(ps.pos, P.pos); follow(); return true;
+      k.KeyF = false; if (!m.wp) m.wp = M.path(ps.pos, P.pos); follow(); return true;
     }
     // 나가기: 입구 → 버스
-    k.KeyG = false;
+    k.KeyF = false;
     if (M.inside(ps.pos)) { if (!m.wp) m.wp = M.path(ps.pos, M.DOOR); follow(); return true; }
     const L = ZK.fort.local(ps.pos);
-    if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyF'); return true; }
+    if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyG'); return true; }
     walkTo(F.pos.x, F.pos.z); return true;
   }
   // ── 1탄 경찰서 원정 (police3d, 2026-11-10): 마당 앞(P.LOT)에 버스 → 걸어서 정문 → 금고·무기고(+책상 몇 곳) → 경보가 울리면 정문으로 나와 버스 ──
@@ -219,7 +219,7 @@
       B.police = { phase: 'drive', t: 0, n: 0, skip: new Set() }; R.policeTrips = (R.policeTrips || 0) + 1; log('POLICE_TRIP');
     }
     const m = B.police; m.t += dt;
-    const stopKeys = () => { for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG']) k[c] = false; };
+    const stopKeys = () => { for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG', 'KeyF']) k[c] = false; };
     const end = cd => { B.police = null; B.policeGoal = null; B.policeCd = cd; stopKeys(); };
     if (m.phase === 'drive') {
       if (g.mode !== 'drive') { m.phase = 'in'; m.t2 = 0; return true; }
@@ -233,7 +233,7 @@
       if (g.mode !== 'drive') { m.phase = 'in'; m.t2 = 0; return true; }
       m.ct += dt; k.KeyW = k.KeyS = k.KeyA = k.KeyD = false; k.Space = !ZK.surv.contract.has('nobrake');
       const yard = PL.zs.some(z => z.alive && !z.remove && !z.sleep && z.police !== 'prisoner' && z.pos.distanceTo(F.pos) < 18);
-      if (!yard || m.ct > 20) { k.Space = false; press('KeyF'); m.phase = 'in'; m.t2 = 0; R.policeClearT = +m.ct.toFixed(1); }
+      if (!yard || m.ct > 20) { k.Space = false; press('KeyG'); m.phase = 'in'; m.t2 = 0; R.policeClearT = +m.ct.toFixed(1); }
       return true;
     }
     if (g.mode === 'drive') { end(got() >= PL.keys.length || g.hp < 70 || R.policeTrips >= 2 ? 999 : 60); return false; }   // 다시 탔으면 끝 (남았고 체력 70 이상이면 60초 뒤 한 번 더 · 최대 2번)
@@ -257,14 +257,14 @@
       }
       const P = m.p, dp = Math.hypot(P.pos.x - ps.pos.x, P.pos.z - ps.pos.z);
       const threat = !!B.losZ && B.losZ.alive && B.losZ.pos.distanceTo(ps.pos) < 6;
-      if (threat && dp < 6) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = k.KeyG = false; return true; }   // 달려드는 놈 먼저 쏜다
-      if (dp < 1.2) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyG = true; m.st += dt; if (P.done) k.KeyG = false; else if (m.st > (P.holdT || 2) + 4) { k.KeyG = false; m.skip.add(P); } return true; }
-      k.KeyG = false; if (!m.wp) m.wp = PL.path(ps.pos, P.pos); follow(); return true;
+      if (threat && dp < 6) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = k.KeyF = false; return true; }   // 달려드는 놈 먼저 쏜다
+      if (dp < 1.2) { k.KeyW = k.KeyS = k.KeyA = k.KeyD = k.ShiftLeft = false; k.KeyF = true; m.st += dt; if (P.done) k.KeyF = false; else if (m.st > (P.holdT || 2) + 4) { k.KeyF = false; m.skip.add(P); } return true; }
+      k.KeyF = false; if (!m.wp) m.wp = PL.path(ps.pos, P.pos); follow(); return true;
     }
-    k.KeyG = false;   // 나가기: 정문 → 버스
+    k.KeyF = false;   // 나가기: 정문 → 버스
     if (PL.inside(ps.pos)) { if (!m.wp) m.wp = PL.path(ps.pos, PL.DOOR); follow(); return true; }
     const L = ZK.fort.local(ps.pos);
-    if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyF'); return true; }
+    if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyG'); return true; }
     walkTo(F.pos.x, F.pos.z); return true;
   }
   function botStep(dt, prof) {
@@ -274,7 +274,7 @@
     if (ZK.bail && ZK.bail.wrecked) { B.mart = null; B.martGoal = null; B.police = null; B.policeGoal = null; if (!B.bailing) { B.bailing = true; log('BAIL'); }
       const N = ZK.needs, s2 = N.s, inv = N.inv; if ((B.useT -= dt) <= 0) { B.useT = 1; if ((s2.bleeding && inv.bandage) || (s2.thirst < 30 && inv.water) || (s2.hunger < 30 && inv.can)) { N.useBest(g); R.uses = (R.uses || 0) + 1; } }   // 걸을 때도 붕대(H) — 처음엔 탈출 중 아이템을 안 써서 출혈로만 죽었다
       if (bailStep(dt, prof)) { shootStep(dt, prof); return; } }
-    if (B.bailing && !ZK.bail.wrecked) { B.bailing = false; log('HOTWIRE'); for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG']) k[c] = false; }
+    if (B.bailing && !ZK.bail.wrecked) { B.bailing = false; log('HOTWIRE'); for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG', 'KeyF']) k[c] = false; }
     if (towerStep(dt, prof)) { shootStep(dt, prof); return; }   // 2탄 타워(tower3d): 8:00에 열리면 입구로 → 내려서 계단·복도 → 옥상 헬기
     const mBusy = martStep(dt, prof), pBusy = policeStep(dt, prof), busy = needsStep(dt, prof) || mBusy || pBusy;   // 경찰서 원정은 마트 원정이 없을 때만 시작   // 1탄 도시: 한빛마트 원정 (내려 있는 동안 H 아이템 사용은 needsStep이 계속)
     if (!busy && g.mode === 'drive') driveStep(dt, prof, F);
@@ -285,7 +285,7 @@
     const df = (dx * -sy + dz * -cy) / l, dr = (dx * cy + dz * -sy) / l; k.KeyW = df > 0.3; k.KeyS = df < -0.3; k.KeyD = dr > 0.3; k.KeyA = dr < -0.3; return l; }
   function towerStep(dt, prof) {
     const TW = ZK.tower; if (!TW || !TW.ready || !TW.isOpen) return false;
-    if (TW.boarded) { for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG']) k[c] = false; return true; }
+    if (TW.boarded) { for (const c of ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft', 'KeyG', 'KeyF']) k[c] = false; return true; }
     if (ZK.bail && ZK.bail.wrecked && !TW.inside && Math.hypot(ps.pos.x - TW.W0.x, ps.pos.z - TW.W0.z) > 6) return false;   // 버스가 터졌으면 입구 6m까지는 bailStep이 데려온다
     const F = ZK.fort.state, W0 = TW.W0;
     if (!B.tw) { B.tw = { t: 0 }; log('TOWER_GO'); }
@@ -293,13 +293,13 @@
     if ((B.useT -= dt) <= 0) { B.useT = 1; const N = ZK.needs, s2 = N.s, inv = N.inv; if ((s2.bleeding && inv.bandage) || (s2.thirst < 30 && inv.water) || (s2.hunger < 30 && inv.can) || (s2.infected && s2.infection >= 40 && inv.anti)) { N.useBest(g); R.uses = (R.uses || 0) + 1; } }
     if (g.mode === 'drive') {   // 버스: 입구 앞 주차 지점으로 (운전은 driveStep이 하고 목표만 바꾼다)
       const P0 = new T.Vector3(W0.x, 0, W0.z + 3.5), d = Math.hypot(P0.x - F.pos.x, P0.z - F.pos.z); B.towerGoal = P0;
-      if (d < 6.5 || (s.t > 70 && d < 25)) { /* 70초가 지나도 입구 25m 밖이면 내리지 않는다 (도시: 140m 밖에서 내려 걷다 죽었다) */ const nb = ZK.surv.contract.has('nobrake'); k.KeyW = false; k.KeyA = k.KeyD = false; k.Space = !nb; k.KeyS = nb && F.speed > 0.5; if (Math.abs(F.speed) < 1.5) press('KeyF'); return true; }
+      if (d < 6.5 || (s.t > 70 && d < 25)) { /* 70초가 지나도 입구 25m 밖이면 내리지 않는다 (도시: 140m 밖에서 내려 걷다 죽었다) */ const nb = ZK.surv.contract.has('nobrake'); k.KeyW = false; k.KeyA = k.KeyD = false; k.Space = !nb; k.KeyS = nb && F.speed > 0.5; if (Math.abs(F.speed) < 1.5) press('KeyG'); return true; }
       return false;
     }
     B.towerGoal = null; k.Space = false;
     if (!TW.inside && R.towerEnterT == null && !(ZK.bail && ZK.bail.wrecked) && Math.hypot(ps.pos.x - W0.x, ps.pos.z - W0.z) > 14) {   // 수색 중에 8:00이 되면 먼저 버스로 (그대로 걸어가면 무리 한가운데를 70m 걷다 죽었다)
-      B.trip = null; k.KeyG = false; const L = ZK.fort.local(ps.pos);
-      if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyF'); return true; }
+      B.trip = null; k.KeyG = k.KeyF = false; const L = ZK.fort.local(ps.pos);
+      if (Math.abs(L.lx) < F.halfW + 2.2 && Math.abs(L.lz) < F.halfL + 2.2) { press('KeyG'); return true; }
       k.ShiftLeft = prof !== PROFILES['초보']; walkTo(F.pos.x, F.pos.z); return true;
     }
     const near = g.zombies.some(z => z.alive && Math.abs(z.pos.y - ps.pos.y) < 2.2 && z.pos.distanceTo(ps.pos) < 12);
@@ -311,7 +311,7 @@
       const inHut = ps.pos.x < -19.3, dp = inHut ? TW.route[TW.route.length - 2] : TW.PAD;   // 계단탑 안이면 먼저 문(동쪽)으로
       const l = walkTo(dp.x, dp.z); if (!inHut && l < 1.5) k.KeyW = k.KeyS = k.KeyA = k.KeyD = false; k.KeyG = !!TW.canBoard; k.ShiftLeft = false; return true;
     }
-    k.KeyG = false;
+    k.KeyG = false;   // 헬기 탑승은 G
     const w = TW.route[Math.min(TW.route.length - 1, (TW.pI ?? 0) + 1)]; walkTo(w.x, w.z);
     if ((s.chk = (s.chk || 0) - dt) <= 0) { s.chk = 3; if (s.last && s.last.distanceTo(ps.pos) < 1) { s.side = 0.6; R.towerStuck = (R.towerStuck || 0) + 1; } s.last = ps.pos.clone(); }   // 3초 동안 1m도 못 가면 잠깐 옆으로
     if (s.side > 0) { s.side -= dt; k.KeyA = true; k.KeyD = false; }
