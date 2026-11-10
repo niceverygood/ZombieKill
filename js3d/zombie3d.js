@@ -270,7 +270,7 @@
         // 배회·경계 중이면 0.3초마다 둘러봐서 시야(낮 12m) 안에 요새·플레이어가 있으면 추적으로 바뀐다
         if (this.aware !== 'chase' && (this.senseT -= dt) <= 0) {
           this.senseT = 0.3; const s = game.targetFor(this);
-          if (Math.hypot(s.x - p.x, s.z - p.z) < (game.sight || 12)) this.aware = 'chase';
+          if (Math.hypot(s.x - p.x, s.z - p.z) < (game.sight || 12) * (s.kind === 'player' && ZK.dread && ZK.dread.stealthK ? ZK.dread.stealthK() : 1)) this.aware = 'chase';   // 몰래 걷기(L7): 앉음·엎드림이면 덜 보이고 질주는 더 보인다
         }
         if (this.T.host) {   // 숙주: 제자리에서 숨 쉬듯 부풀었다 줄었다 (공격·이동 없음)
           const b = 1 + Math.sin(ZK.fx3.time * 3 + this.phase) * 0.06; this.body.scale.set(b * 1.15, b, b * 1.15);

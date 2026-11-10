@@ -3,7 +3,7 @@
 (function () {
   const T = THREE, { rand, clamp, damp } = ZK;
   const F = {};
-  let scene, root, body, cannon, headlight, beaconM, plow;
+  let scene, root, body, cannon, headlight, beaconM, plow, hullM, hlK = 1;   // hullM·hlK: 버스 탈출(bail3d)이 차체 색·전조등을 되돌린다
   const st = F.state = { pos: new T.Vector3(0, 0, 0), heading: 0, speed: 0, hp: 300, maxHp: 300, size: 1, sizeV: 1, modules: 0,
     gunners: [], halfW: 1.4, halfL: 3.8, deckY: 2.11, crashCd: 0, cannonT: 0, flameT: 0, shockT: 0, slot: 0 };
   const BASE = { halfW: 1.4, halfL: 3.8, deckY: 2.11 };
@@ -18,7 +18,7 @@
 
   F.init = function (sc) {
     scene = sc; root = new T.Group(); scene.add(root); body = new T.Group(); root.add(body);
-    const hullM = mat(0x4a5040), dark = mat(0x111214), plate = mat(0x3a3e36), rust = mat(0x6a4a2a);
+    hullM = mat(0x4a5040); const dark = mat(0x111214), plate = mat(0x3a3e36), rust = mat(0x6a4a2a);
     box(2.8, 1.6, 7.6, hullM, 0, 1.25, 0);                                       // 차체
     for (const s of [-1, 1]) box(0.04, 0.42, 6.4, dark, s * 1.41, 1.62, -0.1);       // 창문(철판으로 막음)
     for (const s of [-1, 1]) for (let i = 0; i < 4; i++) box(0.06, 0.5, 1.4, plate, s * 1.43, 1.05, -2.6 + i * 1.75);
@@ -55,7 +55,8 @@
   };
   F.reset = function () {
     Object.assign(st, { heading: 0, speed: 0, hp: 300, maxHp: 300, size: 1, sizeV: 1, modules: 0, crashCd: 0, slot: 0, rally: 0, clingers: 0, looked: false, drift: 0, velH: undefined, nitroT: 0 });
-    st.pos.set(0, 0, 6); if (headlight) headlight.intensity = 2.4;
+    st.pos.set(0, 0, 6); hlK = 1; if (headlight) headlight.intensity = 2.4;
+    st.size0 = 1; if (body) body.visible = true; if (hullM) hullM.color.setHex(0x4a5040);   // 버스 탈출로 바뀐 차체를 되돌린다
     for (const g of st.gunners) body.remove(g.mesh); st.gunners = [];
     body.children.filter(o => o.userData.module || o.userData.trophy).forEach(o => body.remove(o));
     if (plow) plow.material.color.setHex(0x5a5a52);
@@ -93,7 +94,7 @@
 
   // 폐차 흡수 → 장갑판 + 크기·체력 증가
   F.grow = function (color = 0x5a5a5a) {
-    st.modules++; st.size = Math.min(1.9, 1 + st.modules * 0.055);
+    st.modules++; st.size = Math.min(1.9, (st.size0 || 1) + st.modules * 0.055);   // size0: 버스 탈출로 시동 건 작은 차는 0.82부터
     st.maxHp += 30; st.hp = Math.min(st.maxHp, st.hp + 15);   // 흡수 회복 45 → 15 (회복이 피해를 앞질러 위기가 없던 문제)
     const sl = SLOTS[st.slot++ % SLOTS.length], layer = Math.floor((st.slot - 1) / SLOTS.length);
     const m = mat(new T.Color(color).multiplyScalar(0.8).getHex());
@@ -117,7 +118,19 @@
   F.unlockCannon = () => { cannon.visible = true; };
   // ── 무리한 개조 계약 ──
   F.dropGunners = () => { const n = st.gunners.length; for (const q of st.gunners) body.remove(q.mesh); st.gunners.length = 0; return n; };   // 외로운 총잡이
-  F.headlightK = k => { headlight.intensity = 2.4 * k; };   // 정전: 전조등 +30%
+  F.headlightK = k => { hlK = k; headlight.intensity = 2.4 * k; };   // 정전: 전조등 +30%
+  // ── 버스 탈출(bail3d) ──
+  // 숨기기: 몸체(body)만 숨기고 전조등은 세기만 0 — root를 숨기면 전조등 빛이 장면에서 빠져 모든 셰이더가 다시 컴파일된다(멈칫)
+  F.setVisible = v => { body.visible = v; headlight.intensity = v ? 2.4 * hlK : 0; };
+  // 시동 건 폐차가 새 요새: 장갑판·사수는 잃고 · 차 색 · 작은 차체(size0) — 폐차를 흡수하면 다시 커진다
+  F.rebuild = function (x, z, heading, color, hp, size0 = 1) {
+    Object.assign(st, { heading, speed: 0, hp, maxHp: hp, size0, size: size0, sizeV: size0, modules: 0, crashCd: 0, slot: 0, rally: 0, clingers: 0, drift: 0, velH: undefined, nitroT: 0 });
+    st.pos.set(x, 0, z); for (const q of st.gunners) body.remove(q.mesh); st.gunners = [];
+    body.children.filter(o => o.userData.module).forEach(o => body.remove(o));
+    hullM.color.setHex(color); F.setVisible(true);
+    root.position.copy(st.pos); root.rotation.y = heading; root.scale.setScalar(size0);
+    st.halfW = BASE.halfW * size0; st.halfL = BASE.halfL * size0; st.deckY = BASE.deckY * size0;
+  };
   // 계약마다 외형: 공통으로 옆구리에 빨강·검정 경고 띠 + 계약별 소품 (판이 다시 시작하면 trophy로 지워짐)
   F.contractLook = function (id) {
     const tag = o => { o.userData.trophy = true; body.add(o); return o; }, red = mat(0xc81e1e), blk = mat(0x111111);
@@ -144,7 +157,7 @@
 
   function nearestZombie(from, zombies, range) {
     let best = null, bd = range * range;
-    for (const z of zombies) { if (!z.alive || z.state === 'cling') continue; const d = z.pos.distanceToSquared(from); if (d < bd) { bd = d; best = z; } }   // 매달린 좀비는 플레이어 몫
+    for (const z of zombies) { if (!z.alive || z.state === 'cling' || z.retreat || z.sleep || z.indoor || (ZK.tower && ZK.tower.inFoot && ZK.tower.inFoot(z.pos))) continue; const d = z.pos.distanceToSquared(from);   /* 건물 안(타워 안 · z.indoor)은 벽 너머라 사수·포탑이 못 쏜다 — 입구에 버스를 대면 타워 1~8층 좀비 28마리가 2초 만에 벽 너머로 죽었다 (2026-11-10) */ if (d < bd) { bd = d; best = z; } }   // 매달린 좀비는 플레이어 몫 · 물러나는 무리(해일 고요)·잠든 무기고 경비는 쏘지 않는다(쏘면 깨거나 돌아온다)
     return best;
   }
 

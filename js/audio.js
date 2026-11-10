@@ -14,13 +14,13 @@
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16; comp.knee.value = 6; comp.ratio.value = 8;
     comp.attack.value = 0.001; comp.release.value = 0.2;
-    master = ctx.createGain(); master.gain.value = 0.95;
+    master = ctx.createGain(); master.gain.value = 0.95 * vol;
     comp.connect(master); master.connect(ctx.destination);
     // 공포 디렉터: 효과음 버스 → 먹먹함 필터(빈사 상태에서 귀가 막힌 듯) → 컴프레서. 평소엔 20kHz라 들리지 않는다
     muffleF = ctx.createBiquadFilter(); muffleF.type = 'lowpass'; muffleF.frequency.value = 20000; muffleF.Q.value = 0.5; muffleF.connect(comp);
     sfxBus = ctx.createGain(); sfxBus.connect(muffleF);
     bed = ctx.createGain(); bed.connect(muffleF); ambDuck = ctx.createGain(); ambDuck.connect(master);
-    dreadBus = ctx.createGain(); dreadBus.gain.value = 1; dreadBus.connect(comp);   // 심장박동·긴장 음악은 먹먹함 필터를 거치지 않는다(오히려 더 크게 들려야 한다)
+    dreadBus = ctx.createGain(); dreadBus.gain.value = dvol; dreadBus.connect(comp);   // 심장박동·긴장 음악은 먹먹함 필터를 거치지 않는다(오히려 더 크게 들려야 한다)
 
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
@@ -72,7 +72,11 @@
     src.start(t, s.off);
   }
 
-  A.toggleMute = function () { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.95; return muted; };
+  A.toggleMute = function () { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.95 * vol; return muted; };
+  // 설정 패널(settings3d): 전체 소리 · 긴장 음악·심장박동 (0~1)
+  let vol = 1, dvol = 1;
+  A.setMaster = v => { vol = ZK.clamp(+v, 0, 1); if (master && !muted) master.gain.value = 0.95 * vol; };
+  A.setDread = v => { dvol = ZK.clamp(+v, 0, 1); if (dreadBus) dreadBus.gain.value = dvol; };
   // 덕킹(사이드체인): 총을 쏘는 순간 엔진·바람을 depth만큼 확 줄였다가 rel초에 걸쳐 되돌린다 → 총성이 '뚫고' 나온다
   A.duck = function (depth = 0.5, rel = 0.25) {
     if (!bed) return; const t = ctx.currentTime;

@@ -51,8 +51,10 @@
   // 자리: 시작점(0,6)에서 28~70m · 빈 곳(반경 2m) · 다른 보급함 14m · 수색 지점 6m · 드럼통·트럭 8m 밖. 조준경·소총은 45m 밖
   function pickSpot(far) {
     for (let i = 0; i < 160; i++) {
-      const a = rand(0, 6.283), r = rand(far ? 45 : 28, 70), x = clamp(Math.cos(a) * r, -72, 72), z = clamp(6 + Math.sin(a) * r, -72, 72);
-      if (Math.hypot(x, z - 6) < (far ? 45 : 28) || !ZK.world.freeSpot(x, z, 2)) continue;
+      const city = ZK.world.MAP === 'city', a = rand(0, 6.283), r = city ? rand(far ? 90 : 40, far ? 200 : 160) : rand(far ? 45 : 28, 70) /* 1탄 도시: 넓게 흩어 둔다 */,
+        x = clamp(Math.cos(a) * r, -ZK.world.B + 5, ZK.world.B - 5), z = clamp(6 + Math.sin(a) * r, -ZK.world.B + 5, ZK.world.B - 5);
+      if (Math.hypot(x, z - 6) < (far ? (city ? 90 : 45) : 28) || !ZK.world.freeSpot(x, z, 2)) continue;
+      if (ZK.mart && ZK.mart.BOX && x > ZK.mart.BOX.x0 - 6 && x < ZK.mart.BOX.x1 + 6 && z > ZK.mart.BOX.z0 - 6 && z < ZK.mart.BOX.z1 + 6) continue;   // 마트 건물 안팎은 피함
       if (A.caches.some(c => Math.hypot(c.pos.x - x, c.pos.z - z) < 14)) continue;
       if (ZK.needs.points.some(q => Math.hypot(q.pos.x - x, q.pos.z - z) < 6)) continue;
       if ((ZK.mis.barrels || []).some(b => b.pos.distanceTo(new T.Vector3(x, 0, z)) < 8) || (ZK.mis.trucks || []).some(t => Math.hypot(t.pos.x - x, t.pos.z - z) < 8)) continue;
@@ -75,7 +77,7 @@
     // 경비: 상자 3~7m, 배회(소리를 들으면 깨어 쫓는다). 조준경·소총은 4마리(출근러 1)
     const guards = [];
     for (let i = 0; i < K.guards; i++) {
-      const a = rand(0, 6.283), r = rand(3, 7), zp = new T.Vector3(clamp(pos.x + Math.cos(a) * r, -75, 75), 0, clamp(pos.z + Math.sin(a) * r, -75, 75));
+      const a = rand(0, 6.283), r = rand(3, 7), zp = new T.Vector3(clamp(pos.x + Math.cos(a) * r, -ZK.world.B + 2, ZK.world.B - 2), 0, clamp(pos.z + Math.sin(a) * r, -ZK.world.B + 2, ZK.world.B - 2));
       const z = g.spawnZ(K.far && i === 0 ? 'runner' : 'walker', zp, 'wander'); z.guard = true; z.cacheGuard = true;
       z.sleep = true; z.tideK = 0.04; z.senseT = 999; z.wp = { x: zp.x + rand(-0.5, 0.5), z: zp.z + rand(-0.5, 0.5) }; z.wpT = 999;   // 제자리에서 잠듦 (예전엔 떠돌다 30~40m씩 흩어졌다)
       guards.push(z);

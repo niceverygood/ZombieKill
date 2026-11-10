@@ -39,9 +39,9 @@
     document.addEventListener('pointerlockchange', () => { st.locked = document.pointerLockElement === dom; });
     addEventListener('mousemove', e => {
       st.cx = e.clientX; st.cy = e.clientY;   // 마우스 잠금이 안 될 때 가장자리 회전용 커서 위치
-      if (!st.locked) return;
-      const s = SENS * (st.aimK > 0.5 ? (scoped() ? 0.32 : 0.65) : 1);   // 조준경 확대 중엔 더 느리게
-      if (st.freeLook) { st.lookYaw = clamp(st.lookYaw - e.movementX * s, -1.9, 1.9); st.lookPitch = clamp(st.lookPitch - e.movementY * s, -1.1, 1.1); }
+      if (!st.locked || (ZK.inv && ZK.inv.open)) return;   // Tab 소지품 창이 열려 있으면 시점 고정 (배그처럼)
+      const s = SENS * (ZK.cfg ? ZK.cfg.sens : 1) * (st.aimK > 0.5 ? (scoped() ? 0.32 : 0.65) : 1);   // 설정 패널의 마우스 감도 · 조준경 확대 중엔 더 느리게
+      if (st.freeLook) { st.lookYaw = clamp(st.lookYaw - e.movementX * s, -3.0, 3.0);   /* Alt 둘러보기: 좌우 172°까지 → 뒤도 돌아본다 (예전 109°) */ st.lookPitch = clamp(st.lookPitch - e.movementY * s, -1.1, 1.1); }
       else { st.yaw -= e.movementX * s; st.pitch = clamp(st.pitch - e.movementY * s, -1.4, 1.4); mdx += e.movementX; mdy += e.movementY; }
     });
   };
@@ -53,7 +53,7 @@
   P.kick = function (up, side, fx = 1) {   // fx: 화각 펀치·퍼짐 누적 배율 (자동소총은 연사라 0.25)
     st.pitch = clamp(st.pitch + up * 0.35, -1.4, 1.4); st.yaw += side * 0.35;
     st.recPV += up * 0.65 * 22; st.recYV += side * 0.65 * 22;
-    st.fovPunch += 3.2; st.bloom = Math.min(1, st.bloom + 0.55);
+    st.fovPunch += 3.2 * fx; st.bloom = Math.min(1, st.bloom + 0.55 * fx);
   };
   // 화각 펀치: +면 밖으로 확 넓어짐(발사·폭발), −면 확 당겨짐(헤드샷 처치 '줌 펀치')
   P.fovKick = n => { st.fovPunch += n * (ZK.fx3 ? ZK.fx3.J : 1); };
@@ -125,16 +125,20 @@
       const V = st.vault; V.t += dt; const k = Math.min(1, V.t / V.dur), e = k * k * (3 - 2 * k);
       st.pos.x = lerp(V.from.x, V.to.x, e); st.pos.z = lerp(V.from.z, V.to.z, e); st.pos.y = Math.sin(k * Math.PI) * (V.h + 0.2);
       st.vel.set((V.to.x - V.from.x) / V.dur * 0.6, 0, (V.to.z - V.from.z) / V.dur * 0.6);
-      if (k >= 1) { st.vaulting = false; st.pos.y = 0; st.onGround = true; st.landV -= 1.2; ZK.audio.step && ZK.audio.step(1.2); }
+      if (k >= 1) { st.vaulting = false; st.pos.y = ZK.world.groundAt ? ZK.world.groundAt(st.pos.x, st.pos.z, 0.2) : 0; st.onGround = true; st.landV -= 1.2; ZK.audio.step && ZK.audio.step(1.2); }
     } else {
       const acc = st.onGround ? (wl > 0 ? 7.5 : 9) : 1.5;   // 배그처럼 묵직한 가속·감속
       st.vel.x = damp(st.vel.x, wx * speed, acc, dt); st.vel.z = damp(st.vel.z, wz * speed, acc, dt);
       st.vy -= 20 * dt;
+      const yPrev = st.pos.y;
       st.pos.x += st.vel.x * dt; st.pos.z += st.vel.z * dt; st.pos.y += st.vy * dt;
-      if (st.pos.y <= 0) {
+      // 바닥 높이 (2탄 타워의 계단·층): 평소엔 0. 계단을 내려갈 땐 0.6m 안이면 발을 바닥에 붙인다(공중에 뜨지 않게)
+      const gy = ZK.world.groundAt ? ZK.world.groundAt(st.pos.x, st.pos.z, Math.max(st.pos.y, yPrev)) : 0;
+      if (st.pos.y <= gy) {
         if (!st.onGround) { const hard = clamp(-st.vy / 9, 0.2, 1); st.landV -= 2.2 * hard; ZK.audio.step && ZK.audio.step(1.3 * hard); ZK.fx3.trauma(0.05 * hard); }
-        st.pos.y = 0; st.vy = 0; st.onGround = true;
-      }
+        st.pos.y = gy; st.vy = 0; st.onGround = true;
+      } else if (st.onGround && st.vy <= 0 && st.pos.y - gy < 0.6) { st.pos.y = gy; st.vy = 0; }
+      else if (st.pos.y - gy > 0.6) st.onGround = false;
       ZK.world.collide(st.pos, st.stance === 'prone' ? 0.45 : 0.36);
     }
     }

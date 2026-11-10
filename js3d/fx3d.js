@@ -169,9 +169,26 @@
 
   // ───────── 시간·흔들림 ─────────
   // 손맛 세기: 주소 뒤에 ?juice=0.5 (약하게) · ?juice=1.5 (더 세게). 흔들림·카메라 펀치·화면 섬광에만 곱한다 (히트스톱·슬로모는 그대로)
-  const J = F.J = (v => (isFinite(v) ? ZK.clamp(v, 0, 2) : 1))(+(new URLSearchParams(location.search).get('juice') ?? 1));
+  let J = F.J = (v => (isFinite(v) ? ZK.clamp(v, 0, 2) : 1))(+(new URLSearchParams(location.search).get('juice') ?? 1));
+  F.setJuice = v => { J = F.J = ZK.clamp(+v || 0, 0, 2); };   // 설정 패널(settings3d)의 '화면 효과 세기'
   F.trauma = t => { trauma = Math.min(1, trauma + t * J); };
-  F.hitstop = s => { hitstop = Math.max(hitstop, s); };
+  // 히트스톱 예산 (2026-11-10 손맛 검수, qa/손맛검수_2026-11-10.md): 예전엔 명중마다 멈춰 무리 전투에서 실제 시간의 5~10%가 멈췄다(1초 중 최대 0.55초 → '렉'처럼 보임)
+  //  · minor(처치가 아닌 몸통·산탄 명중, 작은 연쇄)는 멈추지 않는다 — 히트마커·임팩트·소리로 충분
+  //  · 직전 멈춤이 끝난 지 0.25초 안이면 절반 · 최근 1초 누적 120ms 상한 → 숙련 봇 실측 멈춤 9~10% → 3~4%
+  //  · 주소 ?hitstop=old 는 예전 규칙(모두 멈춤), ?hitstop=off 는 끔 — 비교·검수용 (qa/juice_ab.js 의 9키도 이 값을 바꾼다)
+  F.hitstopRule = (r => (r === 'old' || r === 'off' ? r : 'budget'))(new URLSearchParams(location.search).get('hitstop'));
+  const hsIv = []; let hsEnd = -9;
+  F.hitstop = (s, minor = false) => {
+    if (F.hitstopRule === 'off') return;
+    if (F.hitstopRule === 'budget') {
+      if (minor) return;
+      const now = F.time; if (now - hsEnd < 0.25) s *= 0.5;
+      let used = 0; for (const [a, b] of hsIv) { const lo = Math.max(a, now - 1), hi = Math.min(b, now); if (hi > lo) used += hi - lo; }
+      s = Math.min(s, 0.12 - used); if (s < 0.005) return;
+      hsIv.push([now, now + s]); if (hsIv.length > 40) hsIv.shift(); hsEnd = now + s;
+    }
+    hitstop = Math.max(hitstop, s);
+  };
   F.slowmo = (scale, s) => { if (s >= slowT) { slowScale = scale; slowT = slowMax = s; } };
   // 카메라 펀치: 한 방 한 방이 화면을 '때리는' 스프링 (값 = 대략 최대 변위, 라디안·미터)
   // trauma(무작위 떨림)와 달리 방향이 있다 → 발사는 위로 튀고 뒤로 밀림, 피격은 맞은 쪽으로 꺾임
@@ -183,7 +200,12 @@
   }
   // 화면 섬광: 총구 불빛 · 헤드샷 금빛 테두리 · 피격 붉은 번쩍 (HUD 캔버스에 그림)
   const flashes = [];
-  F.flash = (r, g, b, a, dur, kind = 'full') => { if (flashes.length > 6) flashes.shift(); flashes.push({ r, g, b, a: a * Math.min(1.3, J), t: dur, max: dur, kind }); };
+  // 붉은 섬광(몸통 처치 테두리·물림 전체)은 0.34초에 한 번만 → 1초에 최대 3번 (WCAG 2.3.1 붉은 번쩍임 기준). 예전엔 무리 처치 때 1초 4번까지 겹쳤다
+  let redT = -9;
+  F.flash = (r, g, b, a, dur, kind = 'full') => {
+    if (r / (r + g + b + 1e-6) >= 0.8) { if (F.time - redT < 0.34) return; redT = F.time; }
+    if (flashes.length > 6) flashes.shift(); flashes.push({ r, g, b, a: a * Math.min(1.3, J), t: dur, max: dur, kind });
+  };
   F.step = function (dt) {
     F.time += dt; trauma = Math.max(0, trauma - dt * 1.5);
     const sd = Math.min(dt, 1 / 30); spring(sd); if (dt > sd) spring(dt - sd);   // 스프링은 실제 시간으로 → 히트스톱 중에도 화면은 튄다
@@ -288,7 +310,7 @@
     for (const d of [ground, holes]) { for (let i = 0; i < d.n; i++) d.m.setMatrixAt(i, zero); d.m.instanceMatrix.needsUpdate = true; d.i = 0; }
     for (const g of gibs) g.m.visible = false; for (const c of casings) c.m.visible = false;
     for (const pool of [mists, smokes, impacts]) for (const o of pool.arr) { o.life = 0; o.s.visible = false; }
-    pools.length = texts.length = flashes.length = 0; trauma = hitstop = slowT = 0; for (const k in pun) pun[k] = 0;
+    pools.length = texts.length = flashes.length = hsIv.length = 0; trauma = hitstop = slowT = 0; hsEnd = redT = -9; for (const k in pun) pun[k] = 0;
   };
 
   ZK.fx3 = F;

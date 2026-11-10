@@ -54,8 +54,13 @@
   S.reset = function () { Object.assign(S, { stats: { ...BASE }, lv: {}, level: 1, xp: 0, next: nextFor(1), pending: 0, choosing: false, cards: [], sel: 1, selX: 0, openT: 0,
     hold: 0, waitT: 0, batchN: 0, batchI: 0, contract: new Set() }); };
   S.reset();
+  // 따라잡기 (2026-11-09 실력 차 난이도): 버스 체력이 30% 밑이면 경험치 ×1.5 → 위기 중에 카드(수리·강판)가 빨리 온다
+  // 봇 18판(경험치 0.3): 초보 0/6이 대부분 8~10분에 졌다 — 버티는 사람에게 손을 내민다. 숙련은 30% 밑으로 거의 안 내려가 영향이 작다
+  // 처음 40%로 했더니 보통이 자주 걸려 10분 레벨이 20~25 → 23~28로 되돌아갔다(카드 과다 재발) → 30%
+  S.CATCHUP = { below: 0.3, mul: 1.5 };
   S.addXP = function (v) {
-    S.xp += v * S.stats.xpMul;
+    const Fs = ZK.fort && ZK.fort.state, cu = Fs && Fs.maxHp && Fs.hp / Fs.maxHp < S.CATCHUP.below ? S.CATCHUP.mul : 1;
+    S.xp += v * S.stats.xpMul * cu;
     while (S.xp >= S.next) { S.xp -= S.next; S.level++; S.next = nextFor(S.level); S.pending++; S.hold = 0; }
   };
   S.grant = n => { S.pending += n; S.hold = 0; };

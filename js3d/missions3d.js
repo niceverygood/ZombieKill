@@ -3,6 +3,7 @@
 (function () {
   const T = THREE, { rand, clamp } = ZK;
   const M = {};
+  M.FORCE_AFTER = 120;   // 확성기 트럭이 포위를 바로 불러낼 수 있는 시각(초). 그 전엔 방송이 유인만 한다
   let scene, fireTex, smokeTex;
   const INFO = {
     supply: { name: '보급 헬기', goal: '떨어진 보급 상자를 챙겨라' },
@@ -13,9 +14,12 @@
   };
   // 두 갈래 무전 (2026-11-09): 0:40 · 3:10 · 5:40에 아직 성공 못 한 종류 중 둘을 동시에 제안 — A 일반(노란 빛기둥 35~55m) / B 위험(붉은 빛기둥 50~70m)
   // 그쪽 25m 안에 들어가거나, 초속 2m 이상으로 움직이며 그쪽 ±20°를 누적 3초 바라보면 선택 · 20초 안에 안 고르면 A · 제한 시간 85초는 고른 순간부터
-  const AT = [40, 190, 340], LIMIT = 85, LZ_T = 510, HELI_T = 600, LEAVE_T = 630, LZ_R = 10, OFFER_T = 20, PICK_R = 25, LOOK_T = 3, LOOK_ANG = 20 * Math.PI / 180;
+  const AT = [40, 190, 340], LIMIT = 85, LZ_T = 480,   /* 8:00 공개 (2026-11-10 타워: 걸어서 올라가는 데만 1분 넘게 걸려 8:30이면 빠듯했다) */ HELI_T = 600, LEAVE_T = 630, LZ_R = 10, OFFER_T = 20, PICK_R = 25, LOOK_T = 3, LOOK_ANG = 20 * Math.PI / 180;
   // 주유소·착륙장 후보: 반경 9m 이상 비어 있는 곳만 (예전 네 귀퉁이 중 (52,52)는 바로 옆이 막혀 착륙장에 못 들어가는 판이 나왔다)
   const CORNERS = [[-52, -52], [-30, -60], [30, 60], [-60, -30], [-25, 45], [25, -45], [-45, -25], [45, 25]];
+  // 1탄 도시(city3d): 주유소 3곳 · 착륙장 후보(공원·운동장·경찰서 마당) · 확성기 트럭 자리(길에 면한 건물 앞) — 광장이면 위의 고정 좌표
+  const C3 = () => ZK.world.city && ZK.world.city.gas && ZK.world.city.gas.length ? ZK.world.city : null;
+  const GAS_SPOTS = () => (C3() ? C3().gas.map(v => [v.x, v.z]) : CORNERS), LZ_SPOTS = () => (C3() ? C3().lz.map(v => [v.x, v.z]) : CORNERS), TRUCKS = () => (C3() ? C3().trucks : TRUCK_SPOTS);
   M.INFO = INFO; M.HELI_T = HELI_T; M.LEAVE_T = LEAVE_T;
   // ── 도시 덫 (2026-11-09): 확성기 트럭 4대(가게 벽 앞) + 트럭 뒤 LPG통 2개씩 + 한글 네온 간판 8개(트럭 위 4 · 수색 셔터 위 4) ──
   // 트럭 후보: 북·남쪽 벽 앞 x ∈ {−53, −35, 35, 53}, 서·동쪽 벽 앞 z ∈ {−39, 39} (수색 셔터와 겹치지 않는 자리). n = 벽에서 광장 쪽 방향
@@ -67,7 +71,7 @@
     hideAll();
     M.list = []; M.offer = null; M.offerIdx = 0; M.doneKinds = new Set(); M.riskyDone = 0; M.riskyPicked = 0; M.knife = false;   // M.list: 고른(시작한) 임무들
     for (let i = 0; i < group3.children.length; i++) group3.children[i].visible = true;   // 지난 판에 쓰러진 생존자 복구
-    M.cur = null; M.done = 0; M.failed = 0; M.flash = null; M.lz = null; M.heliY = 40; M.won = false;
+    M.cur = null; M.done = 0; M.failed = 0; M.flash = null; M.lz = null; M.lzY = 0; M.heliY = 40; M.won = false;
     for (const b of M.barrels || []) removeBarrel(b);
     for (const f of M.fires || []) killFire(f);
     for (const p of M.proj || []) scene.remove(p.mesh);
@@ -75,7 +79,7 @@
     for (const sg of M.signs || []) removeSign(sg);
     M.barrels = []; M.fires = []; M.proj = []; M.trucks = []; M.signs = []; M.pend = []; M.trapN = 0; M.signDrops = 0; M.truckOn = 0; M.trap = null;
     // 확성기 트럭 4대: 시작점에서 30m 이상, 서로 25m 이상 · 각 트럭 뒤(벽 쪽)에 LPG통 2개 · 위에 네온 간판
-    const spots = TRUCK_SPOTS.filter(sp => Math.hypot(sp.x, sp.z - 6) >= 30 && ZK.world.freeSpot(sp.x, sp.z, 3)).sort(() => Math.random() - 0.5), words = SIGN_WORDS.slice().sort(() => Math.random() - 0.5);
+    const spots = TRUCKS().filter(sp => Math.hypot(sp.x, sp.z - 6) >= 30 && ZK.world.freeSpot(sp.x, sp.z, 3)).sort(() => Math.random() - 0.5), words = SIGN_WORDS.slice().sort(() => Math.random() - 0.5);
     for (const sp of spots) { if (M.trucks.length >= 4) break; if (M.trucks.some(t => Math.hypot(t.pos.x - sp.x, t.pos.z - sp.z) < 25)) continue; addTruck(sp, words.pop()); }
     // 셔터 4곳 위에도 간판 (경비 좀비 처리용)
     for (const p of ZK.needs.points.filter(q => q.name === '상점 셔터' && !M.trucks.some(t => t.pos.distanceTo(q.pos) < 9)).sort(() => Math.random() - 0.5).slice(0, 4)) {
@@ -91,7 +95,7 @@
     // 상점 셔터 중 8곳 앞에는 배회 좀비 2~3마리가 지키고 있다 (뒤지는 소리에 깬다)
     const shops = ZK.needs.points.filter(p => p.name === '상점 셔터').sort(() => Math.random() - 0.5).slice(0, 8);
     for (const p of shops) for (let i = 0, n = 2 + (Math.random() < 0.5 ? 1 : 0); i < n; i++) {
-      const a = rand(0, 6.283), r = rand(2.5, 6), x = clamp(p.pos.x + Math.cos(a) * r, -75, 75), zz = clamp(p.pos.z + Math.sin(a) * r, -75, 75);
+      const a = rand(0, 6.283), r = rand(2.5, 6), x = clamp(p.pos.x + Math.cos(a) * r, -ZK.world.B + 2, ZK.world.B - 2), zz = clamp(p.pos.z + Math.sin(a) * r, -ZK.world.B + 2, ZK.world.B - 2);
       const z = g.spawnZ('walker', new T.Vector3(x, 0, zz), 'wander'); z.guard = true;
     }
   };
@@ -134,7 +138,9 @@
     if (t.used || t.absorbed) { ZK.audio.ting && ZK.audio.ting(); return false; }
     t.used = true; t.active = 16; t.speakT = 0; M.truckOn++;
     g.onNotice('확성기가 켜졌다 — 좀비가 트럭으로 몰려든다', '#5a9aff');
-    if (g.noiseM >= 60 && g.hordeClock >= 25) { g.forceHorde = true; }   // 소음이 찬 상태에서 켜면 포위를 지금 트럭으로 불러낸다
+    // 소음이 찬 상태에서 켜면 포위를 지금 트럭으로 불러낸다 — 단, 2:00부터 (2026-11-10)
+    // 판 초반엔 버스가 맨몸이라, 0:32~0:36에 트럭으로 부른 포위가 4분 전 사망으로 이어졌다(17차·L7). 2:00 전엔 방송이 주변 좀비만 끌어모은다
+    if (g.noiseM >= 60 && g.hordeClock >= 25 && g.t >= M.FORCE_AFTER) { g.forceHorde = true; }
     return true;
   };
   M.lure = () => { const t = (M.trucks || []).filter(x => x.active > 0 && !x.absorbed).sort((a, b) => b.active - a.active)[0]; return t ? t.pos : null; };
@@ -216,12 +222,12 @@
     M.cur = m; m.state = 'active'; m.t = 0; const info = INFO[m.kind], R = !!m.risky;
     if (m.kind === 'supply') { m.y = 26; m.landed = false; crate.visible = true; chute.visible = true; crate.position.set(m.pos.x, m.y, m.pos.z); }
     if (m.kind === 'gas') { m.prog = 0; m.sirenT = 0; m.need = R ? 18 : 12; ring.visible = true; ring.position.set(m.pos.x, 0.03, m.pos.z);
-      if (R) for (let i = 0; i < 3; i++) { const a = i * 2.094 + rand(-0.3, 0.3), x = clamp(m.pos.x + Math.cos(a) * 8.5, -74, 74), z = clamp(m.pos.z + Math.sin(a) * 8.5, -74, 74); if (ZK.world.freeSpot(x, z, 1)) addBarrel(x, z); } }   // 원 둘레 드럼통 3개
+      if (R) for (let i = 0; i < 3; i++) { const a = i * 2.094 + rand(-0.3, 0.3), x = clamp(m.pos.x + Math.cos(a) * 8.5, -ZK.world.B + 3, ZK.world.B - 3), z = clamp(m.pos.z + Math.sin(a) * 8.5, -ZK.world.B + 3, ZK.world.B - 3); if (ZK.world.freeSpot(x, z, 1)) addBarrel(x, z); } }   // 원 둘레 드럼통 3개
     if (m.kind === 'escort') { m.phase = 'pick'; m.surv = 3; m.survT = 0; group3.visible = true; group3.position.copy(m.pos); for (const c of group3.children) c.visible = true;
-      if (R) for (let i = 0; i < 10; i++) { const a = rand(0, 6.283), r = rand(5, 10), z = g.spawnZ('walker', new T.Vector3(clamp(m.pos.x + Math.cos(a) * r, -75, 75), 0, clamp(m.pos.z + Math.sin(a) * r, -75, 75)), 'alert'); z.alertPos.copy(m.pos); z.alertT = 60; z.guard = true; } }   // 이미 워커 10마리가 생존자를 노린다 (경비 표시: 멀어져도 디렉터가 지우지 않음)
+      if (R) for (let i = 0; i < 10; i++) { const a = rand(0, 6.283), r = rand(5, 10), z = g.spawnZ('walker', new T.Vector3(clamp(m.pos.x + Math.cos(a) * r, -ZK.world.B + 2, ZK.world.B - 2), 0, clamp(m.pos.z + Math.sin(a) * r, -ZK.world.B + 2, ZK.world.B - 2)), 'alert'); z.alertPos.copy(m.pos); z.alertT = 60; z.guard = true; } }   // 이미 워커 10마리가 생존자를 노린다 (경비 표시: 멀어져도 디렉터가 지우지 않음)
     if (m.kind === 'host') { m.z = g.spawnZ('host', m.pos); m.pos = m.z.pos; m.spawnT = 2; m.kids = 0; m.spawnInt = R ? 2 : 2.5;
       if (R) { const k = 1 + g.t / 220; m.z.hp = m.z.maxHp = Math.round(900 * k);   // 위험: HP 900 · 덩치 호위 2 · 2초마다 낳는다
-        for (let i = 0; i < 2; i++) { const a = rand(0, 6.283), b = g.spawnZ('brute', new T.Vector3(clamp(m.pos.x + Math.cos(a) * 5, -75, 75), 0, clamp(m.pos.z + Math.sin(a) * 5, -75, 75)), 'wander'); b.guard = true; } } }
+        for (let i = 0; i < 2; i++) { const a = rand(0, 6.283), b = g.spawnZ('brute', new T.Vector3(clamp(m.pos.x + Math.cos(a) * 5, -ZK.world.B + 2, ZK.world.B - 2), 0, clamp(m.pos.z + Math.sin(a) * 5, -ZK.world.B + 2, ZK.world.B - 2)), 'wander'); b.guard = true; } } }
     if (m.kind === 'butcher') { m.z = g.spawnZ('butcher', m.pos); m.pos = m.z.pos; m.z.enrageAt = R ? 0.5 : 0; ZK.audio.shriek && ZK.audio.shriek(0, 1.2); }
     (R ? beamR : beam).visible = true;
     g.onNotice(`${R ? '위험 임무' : '임무'}: ${info.name} — ${info.goal}`, R ? '#ff6a4a' : '#ffd23a'); ZK.audio.notice && ZK.audio.notice();
@@ -232,7 +238,7 @@
     const lo = risky ? 50 : 35, hi = risky ? 70 : 55, angOf = v => Math.atan2(v.z - P.z, v.x - P.x);
     const far = v => !avoid || Math.abs(Math.atan2(Math.sin(angOf(v) - angOf(avoid)), Math.cos(angOf(v) - angOf(avoid)))) >= SEP;
     if (kind === 'gas') {   // 주유소: 반경 6m 이상 빈 귀퉁이 — 거리대에 가깝고 다른 선택지와 방향이 갈리는 곳
-      const c = CORNERS.map(([x, z]) => new T.Vector3(x, 0, z)).filter(v => ZK.world.freeSpot(v.x, v.z, 6) && v.distanceTo(P) >= MIN_D && (!avoid || v.distanceTo(avoid) > 20));
+      const c = GAS_SPOTS().map(([x, z]) => new T.Vector3(x, 0, z)).filter(v => ZK.world.freeSpot(v.x, v.z, 6) && v.distanceTo(P) >= MIN_D && (!avoid || v.distanceTo(avoid) > 20));
       c.sort((a, b) => (far(b) - far(a)) || (Math.abs(a.distanceTo(P) - (lo + hi) / 2) - Math.abs(b.distanceTo(P) - (lo + hi) / 2)));
       if (c.length) return c[0];
     }
@@ -244,7 +250,7 @@
       if (k > bestK) { bestK = k; best = v; }
     }
     if (best) return best;
-    for (let i = 0; i < 24; i++) { const a = i * 0.2618, v = new T.Vector3(clamp(P.x + Math.cos(a) * lo, -74, 74), 0, clamp(P.z + Math.sin(a) * lo, -74, 74)); if (Math.hypot(v.x - P.x, v.z - P.z) >= MIN_D && ZK.world.freeSpot(v.x, v.z, 1)) return v; }
+    for (let i = 0; i < 24; i++) { const a = i * 0.2618, v = new T.Vector3(clamp(P.x + Math.cos(a) * lo, -ZK.world.B + 3, ZK.world.B - 3), 0, clamp(P.z + Math.sin(a) * lo, -ZK.world.B + 3, ZK.world.B - 3)); if (Math.hypot(v.x - P.x, v.z - P.z) >= MIN_D && ZK.world.freeSpot(v.x, v.z, 1)) return v; }
     return new T.Vector3(P.x > 0 ? -60 : 60, 0, P.z > 0 ? -60 : 60);   // 최후: 반대쪽 귀퉁이
   }
   function makeOffer(g) {
@@ -318,7 +324,7 @@
       if (m.kind === 'supply') {
         if (!m.landed) { m.y = Math.max(0, m.y - dt * 4.2); crate.position.y = m.y; crate.rotation.y += dt * 0.6;
           if (m.y <= 0) { m.landed = true; chute.visible = false; ZK.audio.thud(); ZK.fx3.trauma(0.12);
-            for (let i = 0, n = m.risky ? 15 : 8; i < n; i++) { const a = rand(0, 6.283), r = rand(12, 18); g.spawnZ(m.risky && i === 0 ? 'brute' : 'walker', new T.Vector3(clamp(m.pos.x + Math.cos(a) * r, -75, 75), 0, clamp(m.pos.z + Math.sin(a) * r, -75, 75)), 'chase'); }   // 위험: 워커 14 + 덩치 1
+            for (let i = 0, n = m.risky ? 15 : 8; i < n; i++) { const a = rand(0, 6.283), r = rand(12, 18); g.spawnZ(m.risky && i === 0 ? 'brute' : 'walker', new T.Vector3(clamp(m.pos.x + Math.cos(a) * r, -ZK.world.B + 2, ZK.world.B - 2), 0, clamp(m.pos.z + Math.sin(a) * r, -ZK.world.B + 2, ZK.world.B - 2)), 'chase'); }   // 위험: 워커 14 + 덩치 1
             g.onNotice('보급 상자 착지! 냄새를 맡고 좀비가 몰려든다', '#ffb24a'); } }
         else if (nearBus(m.pos, 2.4) || nearMe(m.pos, 2.2, g)) finish(m, true, g);
       }
@@ -345,7 +351,7 @@
       if (m.kind === 'host' && m.z.alive && m.z.sacPause > 0) m.z.sacPause -= dt;   // 고름주머니가 터지면 6초 동안 못 낳는다
       else if (m.kind === 'host' && m.z.alive && (m.spawnT -= dt) <= 0 && m.kids < 24) {   // 숙주는 2.5초마다(위험 2초) 한 마리씩 낳는다
         m.spawnT = m.spawnInt || 2.5; m.kids++; const a = rand(0, 6.283), r = rand(4, 8);
-        g.spawnZ(Math.random() < 0.3 ? 'runner' : 'walker', new T.Vector3(clamp(m.pos.x + Math.cos(a) * r, -75, 75), 0, clamp(m.pos.z + Math.sin(a) * r, -75, 75)), 'chase');
+        g.spawnZ(Math.random() < 0.3 ? 'runner' : 'walker', new T.Vector3(clamp(m.pos.x + Math.cos(a) * r, -ZK.world.B + 2, ZK.world.B - 2), 0, clamp(m.pos.z + Math.sin(a) * r, -ZK.world.B + 2, ZK.world.B - 2)), 'chase');
         ZK.fx3.blood(m.pos.clone().setY(1.8), new T.Vector3(Math.cos(a), 0.6, Math.sin(a)), 0.8);
       }
       // 위험 도살자: 체력 50% 밑이면 분노 (속도 1.75 → 2.5 · 타격 40 → 55)
@@ -360,16 +366,19 @@
     }
     // 탈출: 8:30에 착륙장 공개 → 10:00 헬기 도착 → 10:30까지 착륙장(반경 10m)에 들어가면 성공
     if (!M.lz && g.t >= LZ_T) {
-      const P = F().pos, c = CORNERS.map(([x, z]) => new T.Vector3(x, 0, z)).filter(v => ZK.world.freeSpot(v.x, v.z, 9)).sort(() => Math.random() - 0.5);
-      M.lz = c[0] || new T.Vector3(50, 0, 50); lzBeam.visible = lzRing.visible = true; lzBeam.position.set(M.lz.x, 30, M.lz.z); lzRing.position.set(M.lz.x, 0.03, M.lz.z);
-      smoke.forEach((s, i) => { s.visible = true; s.position.set(M.lz.x + rand(-1, 1), (i / smoke.length) * 14, M.lz.z + rand(-1, 1)); s.scale.setScalar(2 + i * 0.3); });
+      const P = F().pos, c = LZ_SPOTS().map(([x, z]) => new T.Vector3(x, 0, z)).filter(v => ZK.world.freeSpot(v.x, v.z, 9)).sort(() => Math.random() - 0.5);
+      M.lz = c[0] || new T.Vector3(50, 0, 50);
+      // 2탄 타워(tower3d): 착륙장은 타워 옥상 헬기장 — 빛기둥·연기도 옥상에서 오른다
+      const TWR = ZK.tower && ZK.tower.ready ? ZK.tower : null; if (TWR) { M.lz = new T.Vector3(TWR.PAD.x, 0, TWR.PAD.z); M.lzY = TWR.ROOF; }
+      lzBeam.visible = lzRing.visible = true; lzBeam.position.set(M.lz.x, 30 + M.lzY, M.lz.z); lzRing.position.set(M.lz.x, 0.03 + M.lzY, M.lz.z); lzRing.scale.setScalar(TWR ? TWR.PAD.r / LZ_R : 1);
+      smoke.forEach((s, i) => { s.visible = true; s.position.set(M.lz.x + rand(-1, 1), M.lzY + (i / smoke.length) * 14, M.lz.z + rand(-1, 1)); s.scale.setScalar(2 + i * 0.3); });
       if (M.cur) finish(M.cur, false, g);
       if (M.offer) { M.offer = null; beam.visible = beamR.visible = false; }   // 답하지 못한 무전은 끊긴다
-      g.onNotice('탈출 헬기가 10:00에 온다! 초록 연기(착륙장)로 가라', '#7dff9a'); ZK.audio.levelUp();
+      g.onNotice(M.lzY ? '탈출 헬기가 10:00에 타워 옥상에 온다! 타워 입구가 열렸다 — 버스로 입구까지, 걸어서 옥상까지' : '탈출 헬기가 10:00에 온다! 초록 연기(착륙장)로 가라', '#7dff9a'); ZK.audio.levelUp();
     }
     if (M.lz) {
-      for (const s of smoke) { s.position.y += dt * 2.2; if (s.position.y > 16) s.position.y = 0.5; s.material.opacity = 0.7 * (1 - s.position.y / 16); }
-      if (g.t >= HELI_T - 4) { heli.visible = true; M.heliY = M.won ? M.heliY + dt * 6 : Math.max(6, M.heliY - dt * 9); heli.position.set(M.lz.x, M.heliY, M.lz.z + 2); rotor.rotation.y += dt * 30; }
+      for (const s of smoke) { s.position.y += dt * 2.2; if (s.position.y > M.lzY + 16) s.position.y = M.lzY + 0.5; s.material.opacity = 0.7 * (1 - (s.position.y - M.lzY) / 16); }
+      if (g.t >= HELI_T - 4) { heli.visible = true; M.heliY = M.won ? M.heliY + dt * 6 : Math.max(M.lzY ? 2.2 : 6, M.heliY - dt * 9); heli.position.set(M.lz.x, M.heliY + M.lzY, M.lz.z + 2); rotor.rotation.y += dt * 30; }
     }
     // 연쇄 폭발 대기열
     for (let i = M.pend.length - 1; i >= 0; i--) { const q = M.pend[i]; if ((q.t -= dt) <= 0) { M.pend.splice(i, 1); M.blowBarrel(q.b, g, q.src); } }
@@ -422,15 +431,21 @@
     }
     if (M.flash && (M.flash.t -= dt) <= 0) M.flash = null;
   };
-  M.inLZ = g => !!M.lz && (F().pos.distanceTo(M.lz) < LZ_R + 1 || (g.mode === 'foot' && ZK.player.state.pos.distanceTo(M.lz) < LZ_R));
-  M.canWin = g => g.t >= HELI_T && M.inLZ(g);
-  M.missed = g => g.t >= LEAVE_T && !M.inLZ(g);
+  M.inLZ = g => !!M.lz && ((!(ZK.bail && ZK.bail.wrecked) && F().pos.distanceTo(M.lz) < LZ_R + 1) || (g.mode === 'foot' && ZK.player.state.pos.distanceTo(M.lz) < LZ_R));   // 터진 버스(bail3d)가 착륙장에 있어도 사람이 없으면 아니다
+  // 2탄 타워: 옥상에서 G 3초로 헬기에 타고 이륙이 끝나야 승리 · 10:30까지 못 타면 헬기를 놓친다
+  const towerMode = () => !!(ZK.tower && ZK.tower.ready && M.lzY);
+  M.canWin = g => towerMode() ? ZK.tower.escaped : g.t >= HELI_T && M.inLZ(g);
+  M.missed = g => g.t >= LEAVE_T && !(towerMode() ? ZK.tower.boarded : M.inLZ(g));
+  // 지상에서 뛰어갈 지점 (버스 탈출·해일·봇이 같이 본다): 평소엔 착륙장, 타워면 입구 앞, 타워 안이면 null
+  M.runTo = g => !M.lz ? null : towerMode() ? (ZK.tower.inside ? null : ZK.tower.W0) : M.lz;
   M.onWin = () => { M.won = true; };
 
   // 봇·나침반·레이더가 쓰는 '지금 목표'
   M.target = function (g) {
     const m = M.cur;
     if (M.lz) { const left = g.t < HELI_T ? HELI_T - g.t : LEAVE_T - g.t;
+      if (towerMode()) { const TWR = ZK.tower, nx = TWR.next(), fl = TWR.floorOf(ZK.player.state.pos.y);
+        return { x: nx.x, z: nx.z, name: TWR.inside ? '옥상으로' : '타워 입구로', sub: TWR.inside ? `${fl >= 12 ? '옥상' : fl + 1 + 'F'} · 헬기 ${g.t < HELI_T ? '도착 ' + fmt(left) : '대기 중! ' + fmt(left)}` : (g.t < HELI_T ? `버스로 입구까지 · 헬기 도착 ${fmt(left)}` : `헬기 대기 중! ${fmt(left)} 안에 옥상으로`), left, kind: TWR.inside ? 'tower' : 'lz', col: '#7dff9a' }; }
       return { x: M.lz.x, z: M.lz.z, name: '탈출', sub: g.t < HELI_T ? `착륙장으로 · 헬기 도착 ${fmt(left)}` : `헬기 대기 중! ${fmt(left)} 안에 착륙장으로`, left, kind: 'lz', col: '#7dff9a' }; }
     if (!m) return null;
     const p = m.kind === 'host' || m.kind === 'butcher' ? m.z.pos : m.pos;
